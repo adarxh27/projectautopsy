@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Autopsy — AI Failure Analyst</title>
+<style>
+  :root{
+    --bg:#eef1f7; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --primary:#4f46e5; --primary-2:#6366f1; --primary-soft:#eef2ff;
+    --crit:#dc2626; --high:#f97316; --mod:#d97706; --low:#64748b; --minor:#94a3b8;
+    --good:#059669;
+    --radius:14px; --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px -12px rgba(15,23,42,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(1200px 500px at 15% -10%, #e0e7ff 0%, transparent 55%),
+      radial-gradient(900px 420px at 110% 0%, #cffafe 0%, transparent 50%),
+      var(--bg);
+    color:var(--ink); line-height:1.5; font-size:15px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  /* ---------- top bar ---------- */
+  .topbar{background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--primary),#7c3aed);display:grid;place-items:center;color:#fff;flex:0 0 auto}
+  .brand .logo svg{width:19px;height:19px}
+  .brand .name{font-weight:800;letter-spacing:-.01em;font-size:16px}
+  .brand .tag{font-size:11.5px;color:var(--muted);font-weight:500}
+  .topbar .pill{font-size:12px;color:var(--muted);background:var(--primary-soft);border:1px solid #e0e7ff;color:var(--primary);padding:5px 11px;border-radius:999px;font-weight:600}
+
+  /* ---------- stepper ---------- */
+  .stepper{display:flex;align-items:center;justify-content:center;gap:6px;margin:26px auto 8px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--muted);font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s}
+  .step .n{width:22px;height:22px;border-radius:50%;background:#eef1f7;display:grid;place-items:center;font-size:12px;color:var(--muted)}
+  .step.done{color:var(--primary);border-color:#e0e7ff}
+  .step.done .n{background:var(--primary);color:#fff}
+  .step.active{color:var(--primary);border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .step.active .n{background:var(--primary);color:#fff}
+  .step:hover:not(.active){border-color:#c7d2fe}
+  .step-sep{color:#cbd5e1}
+
+  /* ---------- screens ---------- */
+  .screen{display:none;animation:fade .25s ease}
+  .screen.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  main{min-height:calc(100vh - 190px);padding:18px 0 60px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px;margin-bottom:20px}
+  h1,h2,h3{letter-spacing:-.02em}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+
+  /* ---------- buttons ---------- */
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s;text-decoration:none;font-family:inherit}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-primary:hover{background:#4338ca}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:#c7d2fe;background:#f8faff}
+  .btn-sm{padding:7px 13px;font-size:13px;border-radius:8px}
+  .btn-danger{background:#fff;border-color:#fecdd3;color:var(--crit)}
+  .btn-danger:hover{background:#fff1f2}
+
+  /* ---------- forms ---------- */
+  label{display:block;font-size:12.5px;font-weight:700;color:#475569;margin:14px 0 6px;letter-spacing:.01em}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink);transition:.15s;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  textarea{resize:vertical;min-height:70px}
+  .grid{display:grid;gap:0 18px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+
+  /* ---------- hero ---------- */
+  .hero{text-align:center;padding:38px 10px 8px}
+  .hero h1{font-size:40px;margin:0 0 10px;letter-spacing:-.03em}
+  .hero h1 .grad{background:linear-gradient(90deg,var(--primary),#7c3aed,#0891b2);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{max-width:640px;margin:0 auto 26px;color:var(--muted);font-size:16px}
+  .agent-strip{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0 28px}
+  .agent-pill{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);padding:9px 14px;border-radius:999px;font-size:13.5px;font-weight:600;box-shadow:var(--shadow)}
+  .demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:26px 0 6px;text-align:left}
+  @media(max-width:760px){.demo-grid{grid-template-columns:1fr}}
+  .demo-card{border:1px solid var(--line);border-radius:var(--radius);padding:20px;background:#fff;cursor:pointer;transition:.15s;box-shadow:var(--shadow);text-align:left;display:block;color:inherit}
+  .demo-card:hover{border-color:var(--primary);transform:translateY(-2px)}
+  .demo-card .kicker{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
+  .demo-card .t{font-size:16px;font-weight:700;margin-bottom:6px}
+  .demo-card .d{font-size:13px;color:var(--muted)}
+  .howto{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:26px 0 4px;text-align:left}
+  @media(max-width:760px){.howto{grid-template-columns:1fr}}
+  .howto .h{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+  .howto .h .n{width:26px;height:26px;border-radius:8px;background:var(--primary-soft);color:var(--primary);display:grid;place-items:center;font-weight:800;font-size:13px;margin-bottom:10px}
+  .howto .h b{display:block;margin-bottom:4px;font-size:14.5px}
+  .howto .h span{font-size:13px;color:var(--muted)}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+  .tab{padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:7px;align-items:center}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+  .tab .cnt{background:#eef1f7;border-radius:999px;padding:0 8px;font-size:11.5px;color:var(--muted)}
+  .tab.active .cnt{background:var(--primary-soft);color:var(--primary)}
+
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:8px 10px;border-bottom:1px solid #eef2f7;vertical-align:top}
+  td input,td select{padding:7px 9px;font-size:13px}
+  .row-del{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:16px;padding:6px;border-radius:6px}
+  .row-del:hover{color:var(--crit);background:#fff1f2}
+
+  /* ---------- symptoms ---------- */
+  .sym-group{margin-bottom:16px}
+  .sym-group h4{margin:4px 0 10px;font-size:12.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+  .sym-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px}
+  @media(max-width:760px){.sym-grid{grid-template-columns:1fr}}
+  .sym{display:flex;align-items:flex-start;gap:9px;background:#f8fafc;border:1px solid #eef2f7;border-radius:9px;padding:9px 11px;cursor:pointer;font-size:13.5px;transition:.12s}
+  .sym:hover{border-color:#c7d2fe;background:#f8faff}
+  .sym input{margin-top:3px;accent-color:var(--primary)}
+  .sym.checked{background:var(--primary-soft);border-color:#c7d2fe}
+
+  /* ---------- run screen ---------- */
+  .run-head{text-align:center;margin:6px 0 22px}
+  .run-head h2{margin:0 0 4px}
+  .progress{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin:4px 0 22px}
+  .progress .bar{height:100%;background:linear-gradient(90deg,var(--primary),#7c3aed);border-radius:999px;transition:width .3s ease;width:0}
+  .agent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:860px){.agent-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.agent-grid{grid-template-columns:1fr}}
+  .agent-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:.2s;min-height:118px}
+  .agent-card.running{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .agent-card.done{border-color:#bbf7d0}
+  .agent-card .top{display:flex;align-items:center;gap:9px}
+  .agent-card .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:15px;color:#fff}
+  .agent-card .nm{font-weight:700;font-size:13.5px;flex:1}
+  .agent-card .st{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .st.pending{background:#f1f5f9;color:var(--muted)}
+  .st.running{background:var(--primary-soft);color:var(--primary);animation:pulse 1s infinite}
+  .st.done{background:#ecfdf5;color:var(--good)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .agent-card .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--muted);margin-top:9px;min-height:15px}
+  .agent-card .res{margin-top:8px;display:none;align-items:center;gap:9px}
+  .agent-card.done .res{display:flex}
+  .mini-bar{flex:1;height:5px;background:#eef1f7;border-radius:99px;overflow:hidden}
+  .mini-bar span{display:block;height:100%;border-radius:99px}
+
+  /* ---------- report ---------- */
+  .report-toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+  .report-toolbar .spacer{flex:1}
+  .rpt-title{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .rpt-title h1{margin:0 0 6px;font-size:27px;letter-spacing:-.02em}
+  .badge{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:700}
+  .badge.outcome{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+  .badge.risk{background:var(--primary-soft);color:var(--primary);border:1px solid #e0e7ff}
+  .badge.conf{background:#ecfdf5;color:var(--good);border:1px solid #a7f3d0}
+  .meta-line{font-size:13px;color:var(--muted);margin-top:4px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:520px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+  .kpi .v{font-size:23px;font-weight:800;letter-spacing:-.02em}
+  .kpi .l{font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:600}
+  .kpi.warn .v{color:var(--crit)} .kpi.mid .v{color:var(--mod)} .kpi.ok .v{color:var(--good)}
+
+  .sec-title{display:flex;align-items:center;gap:10px;margin:28px 0 12px}
+  .sec-title h2{margin:0;font-size:19px}
+  .sec-title .line{flex:1;height:1px;background:var(--line)}
+
+  .rc-card{border:1px solid var(--line);border-left-width:5px;border-radius:12px;background:#fff;padding:20px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .rc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .rank-badge{width:30px;height:30px;border-radius:9px;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px}
+  .rc-title{font-size:17px;font-weight:800;letter-spacing:-.01em;flex:1}
+  .area-tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f1f5f9;color:var(--muted)}
+  .rc-chain{display:flex;flex-wrap:wrap;align-items:center;gap:7px;background:#f8fafc;border:1px dashed #e2e8f0;border-radius:9px;padding:10px 13px;margin:13px 0;font-size:13px}
+  .rc-chain .arrow{color:#94a3b8;font-weight:700}
+  .rc-why{font-size:13.5px;color:#475569;margin:0 0 12px}
+  .rc-score{display:flex;align-items:center;gap:10px;margin:12px 0 6px}
+  .rc-score .bar{flex:1;height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
+  .rc-score .bar span{display:block;height:100%;border-radius:99px}
+  .rc-score .pct{font-weight:800;font-size:13px;width:38px;text-align:right}
+  .ev-list{list-style:none;margin:10px 0 6px;padding:0}
+  .ev-list li{display:flex;gap:8px;font-size:12.5px;color:var(--muted);padding:4px 0;border-bottom:1px dashed #eef2f7}
+  .ev-list li:last-child{border-bottom:none}
+  .ev-tag{flex:0 0 auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:5px;margin-top:2px}
+  .ev-tag.note{background:#e0f2fe;color:#0369a1}
+  .ev-tag.symptom{background:#fce7f3;color:#be185d}
+  .ev-tag.metric{background:#fef9c3;color:#a16207}
+  .finding-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+  .fchip{font-size:11.5px;font-weight:600;background:#f1f5f9;color:#475569;padding:3px 9px;border-radius:6px}
+  .prev-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+  .prev-list li{display:flex;gap:9px;align-items:flex-start;background:#f0fdf4;border:1px solid #dcfce7;border-radius:9px;padding:10px 12px;font-size:13px}
+  .prev-list .tick{color:var(--good);font-weight:800}
+  .prev-list .fw{font-size:11px;color:var(--good);font-weight:700;margin-left:auto;white-space:nowrap;padding-top:1px}
+
+  .chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em}
+  .sev-Critical{background:#fee2e2;color:#b91c1c}
+  .sev-High{background:#ffedd5;color:#c2410c}
+  .sev-Moderate{background:#fef3c7;color:#a16207}
+  .sev-Low{background:#f1f5f9;color:#475569}
+  .sev-Minor{background:#f8fafc;color:#94a3b8}
+
+  details.acc{border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:10px;box-shadow:var(--shadow);overflow:hidden}
+  details.acc summary{cursor:pointer;padding:15px 18px;display:flex;align-items:center;gap:11px;font-weight:700;list-style:none}
+  details.acc summary::-webkit-details-marker{display:none}
+  details.acc summary .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:14px}
+  details.acc summary .verdict{margin-left:auto;font-size:12px;font-weight:700;color:var(--muted)}
+  details.acc .body{padding:4px 18px 16px}
+  .finding{border:1px solid #eef2f7;border-radius:10px;padding:13px 15px;margin-bottom:10px;background:#fbfcfe}
+  .finding .fh{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .finding .ft{font-weight:700;font-size:14px}
+  .finding .fd{font-size:13px;color:var(--muted);margin-top:6px}
+  .conf-dot{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;margin-left:2px}
+
+  .plan-table td:first-child{font-weight:700;color:var(--primary);white-space:nowrap}
+  .effort{font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px}
+  .effort.S{background:#ecfdf5;color:#047857}
+  .effort.M{background:#fffbeb;color:#b45309}
+  .effort.L{background:#fef2f2;color:#b91c1c}
+  .fw-tag{font-size:11px;font-weight:600;background:#eef2ff;color:#4f46e5;padding:2px 8px;border-radius:6px;white-space:nowrap}
+
+  .pattern-strip{display:flex;flex-wrap:wrap;gap:10px}
+  .pattern{flex:1 1 300px;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:13px 15px}
+  .pattern b{display:block;font-size:13.5px;margin-bottom:3px}
+  .pattern span{font-size:12.5px;color:#78350f}
+
+  .notice{border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;padding:22px;text-align:center;color:var(--muted)}
+
+  .footer{text-align:center;color:var(--muted);font-size:12px;padding:22px 0 34px;border-top:1px solid var(--line)}
+  .footer b{color:var(--ink)}
+
+  @media print{
+    .topbar,.stepper,.footer,.report-toolbar,.screen-nav,.btn,.hero{display:none !important}
+    body{background:#fff}
+    .screen{display:none}.screen.active{display:block}
+    .card,.kpi,.rc-card,.pattern,details.acc{border-radius:0;box-shadow:none;break-inside:avoid}
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="name">Project Autopsy</div>
+        <div class="tag">AI Failure Analyst · multi-agent root-cause forensics</div>
+      </div>
+    </div>
+    <div class="pill">PM forensics toolkit</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stepper" id="stepper">
+    <div class="step" data-step="1"><span class="n">1</span> Project</div>
+    <span class="step-sep">→</span>
+    <div class="step" data-step="2"><span class="n">2</span> Evidence</div>
+    <span class="step-sep">→</span>
+    <div class="step" data-step="3"><span class="n">3</span> Analyze</div>
+    <span class="step-sep">→</span>
+    <div class="step" data-step="4"><span class="n">4</span> Report</div>
+  </div>
+</div>
+
+<main>
+  <div class="wrap">
+
+    <!-- ============ HOME ============ -->
+    <section class="screen active" id="screen-home">
+      <div class="hero">
+        <h1>Why did your project <span class="grad">fail or slip?</span></h1>
+        <p>Enter a troubled project — its tasks, notes, milestones and red flags — and six specialist agents will investigate it in parallel, then deliver a ranked <b>root-cause report</b> with a <b>preventive action plan</b>.</p>
+        <div class="agent-strip" id="home-agent-strip"></div>
+        <div style="margin-top:4px">
+          <button class="btn btn-primary" onclick="startNew()" style="font-size:15px;padding:12px 24px">Start a new analysis →</button>
+        </div>
+
+        <div class="demo-grid">
+          <a class="demo-card" onclick="loadDemo('A')">
+            <div class="kicker">Demo case study</div>
+            <div class="t">📉 CRM rollout that slipped 6 months</div>
+            <div class="d">Enterprise software project — scope creep, attrition, silos, cut QA budget. 10 tasks, 10 notes, 5 milestones, 14 red flags.</div>
+          </a>
+          <a class="demo-card" onclick="loadDemo('B')">
+            <div class="kicker">Demo case study</div>
+            <div class="t">🏢 Office relocation that went over budget</div>
+            <div class="d">Facilities move — permit surprises, sponsor drift, no owner. 6 tasks, 6 notes, 3 milestones, 8 red flags.</div>
+          </a>
+        </div>
+
+        <div class="howto">
+          <div class="h"><div class="n">1</div><b>Document the project</b><span>Basic profile: what it was, planned vs actual dates, how it ended.</span></div>
+          <div class="h"><div class="n">2</div><b>Enter the evidence</b><span>Tasks with dates, meeting notes, milestone slippage, red flags.</span></div>
+          <div class="h"><div class="n">3</div><b>Get the autopsy</b><span>Six agents investigate; you get ranked root causes + fixes.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROFILE ============ -->
+    <section class="screen" id="screen-profile">
+      <div class="card">
+        <h2 style="margin-top:0">1 · Project profile</h2>
+        <p class="muted small" style="margin-top:-6px">The basics. Everything here feeds the analysis — especially the dates and the "what went wrong" brief.</p>
+        <div class="grid g2">
+          <div>
+            <label>Project name *</label>
+            <input type="text" id="f-name" placeholder="e.g. Project Meridian — CRM rollout">
+          </div>
+          <div>
+            <label>Project type</label>
+            <input type="text" id="f-type" list="type-list" placeholder="e.g. Software, Construction, Marketing…">
+            <datalist id="type-list">
+              <option value="Software / IT">
+              <option value="Construction">
+              <option value="Marketing / campaign">
+              <option value="Event">
+              <option value="Product launch">
+              <option value="Operations / facilities">
+              <option value="Research">
+            </datalist>
+          </div>
+          <div>
+            <label>Industry (optional)</label>
+            <input type="text" id="f-industry" placeholder="e.g. Financial services">
+          </div>
+          <div>
+            <label>How did it end?</label>
+            <select id="f-outcome"></select>
+          </div>
+          <div>
+            <label>Methodology</label>
+            <select id="f-method">
+              <option value="">Unknown / not stated</option>
+              <option>Waterfall</option>
+              <option>Agile / Scrum</option>
+              <option>Hybrid</option>
+              <option>Ad-hoc / none</option>
+            </select>
+          </div>
+          <div>
+            <label>Team size (people)</label>
+            <input type="number" id="f-team" min="1" placeholder="e.g. 12">
+          </div>
+          <div>
+            <label>Planned start</label>
+            <input type="date" id="f-ps">
+          </div>
+          <div>
+            <label>Planned end</label>
+            <input type="date" id="f-pe">
+          </div>
+          <div>
+            <label>Actual end (if it ever finished)</label>
+            <input type="date" id="f-ae">
+          </div>
+          <div style="display:flex;align-items:center;padding-top:14px">
+            <div style="flex:1">
+              <label style="margin:0">Complexity / difficulty</label>
+              <div class="muted small" id="cx-label">Moderate (3)</div>
+            </div>
+            <input type="range" id="f-cx" min="1" max="5" value="3" style="width:180px" oninput="document.getElementById('cx-label').textContent = complexityName(this.value)">
+          </div>
+        </div>
+        <div>
+          <label>What went wrong? (brief — this is mined as evidence)</label>
+          <textarea id="f-desc" placeholder="One or two sentences on what happened. e.g. “The original 9-month estimate was a guess by sales; scope ballooned and two key engineers quit.”"></textarea>
+        </div>
+      </div>
+      <div class="screen-nav" style="display:flex;justify-content:space-between">
+        <button class="btn btn-ghost" onclick="goHome()">← Back</button>
+        <button class="btn btn-primary" onclick="toEvidence()">Continue to evidence →</button>
+      </div>
+    </section>
+
+    <!-- ============ EVIDENCE ============ -->
+    <section class="screen" id="screen-evidence">
+      <div class="card">
+        <h2 style="margin:0">2 · Evidence</h2>
+        <p class="muted small" style="margin:2px 0 14px">The more real evidence you add, the sharper the diagnosis. Need inspiration? <a href="#" onclick="return fillSample('A')">load software-case sample</a> or <a href="#" onclick="return fillSample('B')">ops-case sample</a>.</p>
+        <div class="tabs" id="ev-tabs">
+          <div class="tab active" data-tab="tasks">📋 Tasks <span class="cnt" id="cnt-tasks">0</span></div>
+          <div class="tab" data-tab="notes">🗒️ Notes <span class="cnt" id="cnt-notes">0</span></div>
+          <div class="tab" data-tab="miles">🏁 Milestones <span class="cnt" id="cnt-miles">0</span></div>
+          <div class="tab" data-tab="symptoms">🚩 Red flags <span class="cnt" id="cnt-symptoms">0</span></div>
+        </div>
+
+        <div class="tab-panel active" id="panel-tasks">
+          <p class="muted small">Add tasks with planned &amp; actual end dates — the engine computes lateness, slip and compounding delays from these.</p>
+          <table>
+            <thead><tr><th style="width:34%">Task</th><th>Owner</th><th style="width:150px">Status</th><th>Planned end</th><th>Actual end</th><th></th></tr></thead>
+            <tbody id="tasks-body"></tbody>
+          </table>
+          <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="addTask()">+ Add task</button>
+        </div>
+
+        <div class="tab-panel" id="panel-notes">
+          <p class="muted small">Paste meeting notes, emails, retrospective quotes. The engine reads these for signals of scope creep, silos, burnout, etc.</p>
+          <div id="notes-body"></div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="addNote()">+ Add note</button>
+        </div>
+
+        <div class="tab-panel" id="panel-miles">
+          <p class="muted small">Milestones with planned vs actual dates show whether slippage compounded over time.</p>
+          <table>
+            <thead><tr><th>Milestone</th><th>Planned date</th><th>Actual date</th><th style="width:70px">Met?</th><th></th></tr></thead>
+            <tbody id="miles-body"></tbody>
+          </table>
+          <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="addMile()">+ Add milestone</button>
+        </div>
+
+        <div class="tab-panel" id="panel-symptoms">
+          <p class="muted small">Tick the red flags that applied. These are the classic early-warning signs from project-management post-mortems.</p>
+          <div id="symptoms-body"></div>
+        </div>
+      </div>
+      <div class="screen-nav" style="display:flex;justify-content:space-between">
+        <button class="btn btn-ghost" onclick="toProfile()">← Back</button>
+        <button class="btn btn-primary" onclick="runAnalysis()">🔍 Run analysis →</button>
+      </div>
+    </section>
+
+    <!-- ============ RUN ============ -->
+    <section class="screen" id="screen-run">
+      <div class="run-head">
+        <h2>Agents investigating…</h2>
+        <p class="muted small">Six specialist agents review the evidence in parallel, each from its own discipline.</p>
+        <div class="progress"><div class="bar" id="run-bar"></div></div>
+      </div>
+      <div class="agent-grid" id="agent-grid"></div>
+      <div style="text-align:center;margin-top:22px">
+        <div id="run-footer">
+          <button class="btn btn-ghost btn-sm" onclick="skipAnimation()">Skip animation ⏭</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REPORT ============ -->
+    <section class="screen" id="screen-report">
+      <div class="report-toolbar">
+        <button class="btn btn-primary btn-sm" onclick="downloadMarkdown()">⬇ Download Markdown</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyMarkdown()">📋 Copy report</button>
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print / Save PDF</button>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm" onclick="startNew()">+ New analysis</button>
+      </div>
+      <div id="report-body"></div>
+    </section>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <b>Project Autopsy</b> · deterministic multi-agent root-cause analysis (no LLM required) · evidence in → ranked root causes &amp; preventive actions out.<br>
+  Educational tool for project-management post-mortems. Output is guidance, not a substitute for human judgement.
+</footer>
+
+<script>
+/* =========================================================================
+   Project Autopsy — AI Failure Analyst  (analysis engine)
+   Pure, dependency-free logic. Works in Node and in the browser.
+   ========================================================================= */
+(function () {
+  'use strict';
+
+  /* ---------------------------- helpers -------------------------------- */
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function isDate(s) { if (!s) return false; const d = new Date(s); return !isNaN(d); }
+  function days(a, b) {
+    if (!isDate(a) || !isDate(b)) return null;
+    return Math.round((new Date(b) - new Date(a)) / 86400000);
+  }
+  function excerpt(text) {
+    text = (text || '').trim();
+    return text.length > 120 ? text.slice(0, 117) + '…' : text;
+  }
+  function severityLabel(sev) {
+    if (sev >= 4.5) return 'Critical';
+    if (sev >= 3.5) return 'High';
+    if (sev >= 2.5) return 'Moderate';
+    if (sev >= 1.5) return 'Low';
+    return 'Minor';
+  }
+  function verdictFor(score) {
+    if (score >= 80) return 'Critical weakness';
+    if (score >= 60) return 'Major weakness';
+    if (score >= 40) return 'Moderate weakness';
+    if (score >= 20) return 'Minor weakness';
+    return 'Healthy — no significant signal';
+  }
+
+  /* -------------------------- agent metadata --------------------------- */
+  const AGENTS = [
+    { id: 'planning',   name: 'Planning & Scheduling',     icon: '🗓️', color: '#6366f1', desc: 'Estimates, WBS, dependencies, buffers, baselines' },
+    { id: 'scope',      name: 'Scope & Requirements',      icon: '🔍', color: '#0ea5e9', desc: 'Requirement clarity, change control, gold-plating' },
+    { id: 'comms',      name: 'Communication & Coordination', icon: '💬', color: '#14b8a6', desc: 'Cadence, silos, ownership, escalation' },
+    { id: 'resources',  name: 'Resources & Capacity',      icon: '👥', color: '#f59e0b', desc: 'Staffing, skills, burnout, vendors, budget' },
+    { id: 'risk',       name: 'Risk & Quality',            icon: '⚠️', color: '#ef4444', desc: 'Risk register, contingencies, late-stage surprises' },
+    { id: 'governance', name: 'Governance & Stakeholders', icon: '🏛️', color: '#8b5cf6', desc: 'Sponsorship, decisions, priorities, metrics' }
+  ];
+
+  /* ------------------------- finding catalog --------------------------- */
+  // sev: 0-5 base severity, conf: 0-1 base confidence, rcs: root-cause ids
+  const CATALOG = {
+    // planning
+    planning_fallacy:  { agent: 'planning', title: 'Unrealistic / optimistic estimates', sev: 4,   conf: 0.70, rcs: ['planning_fallacy'], detail: 'Estimates appear to have been treated as targets rather than forecasts — the signature of the planning fallacy.' },
+    planning_no_wbs:   { agent: 'planning', title: 'No proper work breakdown',          sev: 3,   conf: 0.60, rcs: ['planning_fallacy'], detail: 'Without a decomposed WBS, work was estimated in large, opaque chunks that hid complexity and risk.' },
+    planning_deps:     { agent: 'planning', title: 'Dependencies not mapped',           sev: 3.5, conf: 0.65, rcs: ['planning_fallacy'], detail: 'Unmapped dependencies meant critical hand-offs (integrations, permits, approvals) were discovered too late.' },
+    planning_slippage: { agent: 'planning', title: 'Chronic milestone slippage',        sev: 4,   conf: 0.80, rcs: ['planning_fallacy'], detail: 'Deadlines slipped consistently, indicating the baseline itself — not execution alone — was unrealistic.' },
+    planning_baseline: { agent: 'planning', title: 'No stable baseline',                sev: 3,   conf: 0.60, rcs: ['planning_fallacy', 'weak_change_control'], detail: 'Tasks existed without planned dates or the plan kept moving, so "on time" was never measurable.' },
+    planning_no_buffer:{ agent: 'planning', title: 'No contingency buffer',             sev: 3,   conf: 0.65, rcs: ['planning_fallacy'], detail: 'The schedule had no float, so the very first slip propagated to every downstream milestone.' },
+    // scope
+    scope_creep:       { agent: 'scope', title: 'Uncontrolled scope growth',           sev: 4.5, conf: 0.80, rcs: ['weak_change_control'], detail: 'Work was added without a matching adjustment to schedule, budget, or staffing.' },
+    scope_changes:     { agent: 'scope', title: 'Frequent change requests',            sev: 4,   conf: 0.75, rcs: ['weak_change_control', 'requirements'], detail: 'A high volume of change requests signals that requirements were never actually settled.' },
+    req_ambiguity:     { agent: 'scope', title: 'Ambiguous / missing requirements',    sev: 4.5, conf: 0.80, rcs: ['requirements'], detail: 'Vague or conflicting requirements force rework, re-estimation, and guesswork downstream.' },
+    scope_nosignoff:   { agent: 'scope', title: 'No acceptance criteria / sign-off',   sev: 3.5, conf: 0.70, rcs: ['requirements', 'weak_change_control'], detail: 'Without measurable "done" criteria, completion was a matter of opinion — and disputes surfaced late.' },
+    scope_churn:       { agent: 'scope', title: 'Shifting goals & priorities',         sev: 4,   conf: 0.70, rcs: ['requirements', 'gov_priority'], detail: 'Objectives kept moving, so finished work was repeatedly invalidated or reworked.' },
+    scope_goldplating: { agent: 'scope', title: 'Gold-plating / over-engineering',     sev: 2.5, conf: 0.60, rcs: ['weak_change_control'], detail: 'Effort was spent on unrequested polish instead of the critical path.' },
+    // comms
+    comms_silo:        { agent: 'comms', title: 'Teams working in silos',              sev: 3.5, conf: 0.70, rcs: ['comms_breakdown'], detail: 'Groups did not coordinate, leading to duplicated work, gaps, and integration failures.' },
+    comms_meetings:    { agent: 'comms', title: 'Missing communication cadence',       sev: 3,   conf: 0.65, rcs: ['comms_breakdown'], detail: 'Without a regular status rhythm, problems were discovered weeks after they appeared.' },
+    comms_escalation:  { agent: 'comms', title: 'Late escalation of issues',           sev: 4,   conf: 0.70, rcs: ['comms_breakdown', 'risk_governance'], detail: 'Blockers were raised too late to be resolved without cascading damage.' },
+    comms_stakeholder: { agent: 'comms', title: 'Stakeholders out of the loop',        sev: 3.5, conf: 0.70, rcs: ['comms_breakdown'], detail: 'Key stakeholders learned of changes informally or after the fact, eroding trust and triggering rework.' },
+    comms_owner:       { agent: 'comms', title: 'Unclear ownership (no RACI)',         sev: 3.5, conf: 0.70, rcs: ['comms_breakdown'], detail: 'Deliverables had no single accountable owner, so gaps went unclaimed until the end.' },
+    comms_distributed: { agent: 'comms', title: 'Distributed-team friction',           sev: 2,   conf: 0.50, rcs: ['comms_breakdown'], detail: 'Remote or distributed working amplified coordination overhead that was never planned for.' },
+    // resources
+    res_understaff:    { agent: 'resources', title: 'Understaffed vs. plan',           sev: 4,   conf: 0.75, rcs: ['capacity'], detail: 'The plan assumed capacity that never materialised — promises of headcount went unfulfilled.' },
+    res_burnout:       { agent: 'resources', title: 'Burnout / sustained overwork',    sev: 4,   conf: 0.75, rcs: ['capacity'], detail: 'Sustained crunch is a leading indicator of attrition and quality collapse.' },
+    res_turnover:      { agent: 'resources', title: 'Attrition & handover loss',       sev: 4,   conf: 0.75, rcs: ['capacity'], detail: 'Losing key people mid-project resets knowledge and velocity (Brooks\u2019s Law territory).' },
+    res_multitask:     { agent: 'resources', title: 'Over-allocation / multitasking',  sev: 3.5, conf: 0.70, rcs: ['capacity'], detail: 'People split across projects lose throughput to context-switching (Little\u2019s Law).' },
+    res_skills:        { agent: 'resources', title: 'Skill / experience gaps',         sev: 3,   conf: 0.65, rcs: ['capacity'], detail: 'Critical work was assigned to people still learning the domain or technology.' },
+    res_budget:        { agent: 'resources', title: 'Budget cuts mid-flight',          sev: 4,   conf: 0.70, rcs: ['capacity', 'weak_change_control'], detail: 'Mid-project funding cuts reduced capacity or quality without re-scoping the plan.' },
+    res_vendor:        { agent: 'resources', title: 'Vendor / third-party failure',    sev: 3.5, conf: 0.70, rcs: ['vendor', 'capacity'], detail: 'External dependencies over-promised and under-delivered, and there was no fallback.' },
+    // risk
+    risk_noregister:   { agent: 'risk', title: 'No risk register or management',       sev: 3.5, conf: 0.70, rcs: ['risk_governance'], detail: 'Risks were never identified, owned, or tracked — so every issue arrived as a surprise.' },
+    risk_keyperson:    { agent: 'risk', title: 'Key-person / single-point-of-failure', sev: 3.5, conf: 0.65, rcs: ['risk_governance'], detail: 'Critical knowledge or authority lived in one person with no redundancy.' },
+    risk_nocontingency:{ agent: 'risk', title: 'No contingency plans',                 sev: 3,   conf: 0.65, rcs: ['risk_governance'], detail: 'When risks materialised there was no pre-agreed response, forcing firefighting.' },
+    risk_integration:  { agent: 'risk', title: 'Late integration / testing surprises', sev: 4,   conf: 0.70, rcs: ['risk_governance', 'planning_fallacy'], detail: 'Integration and testing were squeezed to the end, where problems are most expensive to fix.' },
+    risk_compliance:   { agent: 'risk', title: 'Compliance / regulatory surprises',    sev: 3,   conf: 0.60, rcs: ['risk_governance'], detail: 'Regulatory or contractual constraints surfaced late, blocking or reworking delivery.' },
+    // governance
+    gov_sponsor:       { agent: 'governance', title: 'Weak / absent sponsorship',      sev: 4,   conf: 0.70, rcs: ['gov_priority'], detail: 'Without an engaged sponsor, the project lost air-cover, funding attention, and decision authority.' },
+    gov_priority:      { agent: 'governance', title: 'Conflicting / shifting priorities', sev: 3.5, conf: 0.70, rcs: ['gov_priority'], detail: 'Competing priorities forced the team to thrash between objectives.' },
+    gov_decision:      { agent: 'governance', title: 'Delayed decision-making',        sev: 4,   conf: 0.70, rcs: ['gov_priority'], detail: 'Waiting on approvals idled the team and compressed the schedule on the back end.' },
+    gov_metrics:       { agent: 'governance', title: 'No tracking / visibility',       sev: 3.5, conf: 0.70, rcs: ['gov_priority', 'risk_governance'], detail: 'Progress was reported as opinions ("about 90%") instead of measured, hiding the real state.' },
+    gov_culture:       { agent: 'governance', title: 'Blame culture',                  sev: 2.5, conf: 0.50, rcs: ['comms_breakdown'], detail: 'A blame-oriented culture discourages early flag-raising, the single best defence against failure.' }
+  };
+
+  /* ------------------------- note text patterns ------------------------ */
+  const NOTE_PATTERNS = [
+    // planning
+    { finding: 'planning_fallacy',  re: /unrealistic|too optimistic|over.?optimistic|planning fallacy|no buffer|no contingency|no slack|tight deadline|aggressive timeline|dates? (were|was) (a )?guess|made.?up number|assumed/ },
+    { finding: 'planning_no_wbs',   re: /no wbs|no (work )?breakdown|didn'?t break (it )?down|no task list|task list (was )?missing|never decomposed/ },
+    { finding: 'planning_deps',     re: /dependenc(y|ies) (was |were )?(ignored|forgotten|not mapped)|didn'?t (map|consider|think about) dependenc|forgot (about )?(the )?dependenc/ },
+    { finding: 'planning_baseline', re: /no baseline|changed the plan|replan(ed|ned)|plan (kept )?chang(ing|ed)|moved the date/ },
+    // scope
+    { finding: 'scope_creep',       re: /scope creep|creeping scope|gold.?plat|scope (kept )?(growing|expanding|ballooning)/ },
+    { finding: 'scope_changes',     re: /new requirement|change request|requested change|added (a |another )?(feature|module|requirement)|extra feature|additional requirement|scope (was )?added|expanded scope|out of scope|stretch goal|nice.?to.?have|more scope/ },
+    { finding: 'req_ambiguity',     re: /ambiguous requirement|vague requirement|unclear (requirement|spec|acceptance)|requirements? (were|are|was) (unclear|vague|ambiguous)|conflicting requirement|didn'?t understand what|no acceptance criteria|what (does|did) done mean/ },
+    { finding: 'scope_nosignoff',   re: /no sign.?off|no acceptance criteria|never signed off|no (formal )?approval process|definition of done (was )?missing/ },
+    { finding: 'scope_churn',       re: /changing (goal|priority|requirement)|requirements? (kept )?changing|moved the goal.?post|goal.?post/ },
+    // comms
+    { finding: 'comms_silo',        re: /silo|siloed|no one told|didn'?t know|didn'?t tell|wasn'?t told|found out (in the hallway|from a leaked|by accident|the hard way)|never met|never talked/ },
+    { finding: 'comms_meetings',    re: /no (status )?(meeting|standup|check.?in)|meetings? (were )?(cancelled|canceled|skipped)|no cadence|rarely met/ },
+    { finding: 'comms_escalation',  re: /escalat|raised (it )?(too )?late|too late to|didn'?t escalate|no one escalated|brought up (too )?late/ },
+    { finding: 'comms_stakeholder', re: /stakeholder|sponsor|executive|leadership (was )?(out of the loop|unaware|surprised)|marketing (team )?(had )?no idea|nobody told (the )?(stakeholder|sponsor|client)/ },
+    { finding: 'comms_owner',       re: /no (single )?owner|unclear (who )?own(ed|s)|didn'?t know who|who owns (this|it|that)|ownership (was )?unclear|no raci/ },
+    { finding: 'comms_distributed', re: /remote|time.?zone|distributed team|different office|offshore/ },
+    // resources
+    { finding: 'res_understaff',    re: /under.?staffed|short.?staffed|not enough (people|dev|developers|resources|hands)|under.?resourced|too few people|need(ed)? more (people|staff)|hiring (was )?slow|took (too )?long to hire|promised .{0,20} (people|engineers|staff)/ },
+    { finding: 'res_burnout',       re: /burn.?out|burned out|burnt out|exhausted|overwork(ed)?|long hours|weekends|crunch|no sleep/ },
+    { finding: 'res_turnover',      re: /left (the )?(company|team|project)|quit|resigned|attrition|turnover|handover|onboard(ing)?|new person (started|joined)|replac(e|ed|ing)/ },
+    { finding: 'res_multitask',     re: /over.?allocated|multi.?task|too many projects|spread (too )?thin|context switch|multiple projects|juggling|wearing many hats/ },
+    { finding: 'res_skills',        re: /skill gap|missing skill|no experience|didn'?t know how|learning curve|needed training|(too )?junior|hired .{0,20} junior/ },
+    { finding: 'res_budget',        re: /budget cut|cut the budget|no money|funding (was )?(cut|frozen)|over budget|ran out of money|budget (was )?reduced|save money/ },
+    { finding: 'res_vendor',        re: /vendor|third party|outsourc|contractor|supplier|landlord|permit|external (team|dependency|api)/ },
+    // risk
+    { finding: 'risk_noregister',   re: /no risk (register|assessment|plan)|didn'?t (think about|consider|identify|expect) (the )?risk|nobody expected|never saw (it|that) coming|what if/ },
+    { finding: 'risk_keyperson',    re: /single point of failure|bus factor|only one (person|guy|dev|person who)|key (person|man|developer)|solo (dev|developer)|if .{0,10} (leaves|quits|gets hit by)/ },
+    { finding: 'risk_nocontingency',re: /no (contingency|backup|fallback|plan b)/ },
+    { finding: 'risk_integration',  re: /integration|compatib|didn'?t test until|tested (too )?late|no testing|qa (was )?(late|cut|skipped)|found out during (uat|testing)|found out .{0,20} late/ },
+    { finding: 'risk_compliance',   re: /regulatory|compliance|legal|security (review|audit)|data breach|gdpr|permit|inspection/ },
+    // governance
+    { finding: 'gov_sponsor',       re: /no sponsor|sponsor (left|lost interest|vanished)|no champion|no leadership|steering (committee )?(missing|never met)|no one in charge/ },
+    { finding: 'gov_priority',      re: /priorit(y|ies) (kept )?changing|conflicting priorit|politics|competing (priorit|demand)|turf war/ },
+    { finding: 'gov_decision',      re: /no decision|decision (was )?delayed|delayed decision|waited (for|on) approval|approval (took|was delayed)|waiting for (the )?(vp|ceo|sponsor|steering)/ },
+    { finding: 'gov_metrics',       re: /no metrics|no kpi|no tracking|nobody tracked|no visibility|no status report|no dashboard|didn'?t track (any|a single)/ },
+    { finding: 'gov_culture',       re: /blame|finger.?point|toxic|culture of fear|scapegoat|afraid to (speak|raise)/ }
+  ];
+
+  /* ------------------------- red-flag checklist ------------------------ */
+  const SYMPTOMS = [
+    { id: 'requirements',   agent: 'scope',      finding: 'req_ambiguity',     label: 'Requirements were ambiguous or kept changing' },
+    { id: 'scope_creep',    agent: 'scope',      finding: 'scope_changes',     label: 'New scope was added without adjusting dates or budget' },
+    { id: 'late_decisions', agent: 'governance', finding: 'gov_decision',      label: 'Key decisions were delayed or made at the last minute' },
+    { id: 'multitask',      agent: 'resources',  finding: 'res_multitask',     label: 'People were assigned to multiple projects at once' },
+    { id: 'no_owner',       agent: 'comms',      finding: 'comms_owner',       label: 'No single person owned key deliverables' },
+    { id: 'meetings',       agent: 'comms',      finding: 'comms_meetings',    label: 'Status meetings were infrequent or superficial' },
+    { id: 'vendor',         agent: 'resources',  finding: 'res_vendor',        label: 'External vendors / contractors slipped or under-delivered' },
+    { id: 'burnout',        agent: 'resources',  finding: 'res_burnout',       label: 'Team morale dropped / visible burnout' },
+    { id: 'no_buffer',      agent: 'planning',   finding: 'planning_no_buffer',label: 'The plan had little or no contingency buffer' },
+    { id: 'sponsor',        agent: 'governance', finding: 'gov_sponsor',       label: 'Sponsor / stakeholder attention drifted over time' },
+    { id: 'no_tracking',    agent: 'governance', finding: 'gov_metrics',       label: 'Progress was not tracked with real metrics' },
+    { id: 'silos',          agent: 'comms',      finding: 'comms_silo',        label: 'Teams worked in silos with little cross-talk' },
+    { id: 'turnover',       agent: 'resources',  finding: 'res_turnover',      label: 'Key people left the team mid-project' },
+    { id: 'no_testing',     agent: 'risk',       finding: 'risk_integration',  label: 'Testing / QA was squeezed to the very end' },
+    { id: 'no_risk',        agent: 'risk',       finding: 'risk_noregister',   label: 'No risk register or contingency plan existed' },
+    { id: 'priority',       agent: 'governance', finding: 'gov_priority',      label: 'Priorities kept shifting' },
+    { id: 'gold_plating',   agent: 'scope',      finding: 'scope_goldplating', label: 'Team gold-plated / over-engineered deliverables' },
+    { id: 'signoff',        agent: 'scope',      finding: 'scope_nosignoff',   label: 'No formal sign-off process for deliverables' },
+    { id: 'hero',           agent: 'risk',       finding: 'risk_keyperson',    label: 'Work depended on one or two "heroes"' },
+    { id: 'remote',         agent: 'comms',      finding: 'comms_distributed', label: 'Remote / distributed work caused miscommunication' }
+  ];
+
+  /* --------------------------- root causes ----------------------------- */
+  const ROOT_CAUSES = [
+    {
+      id: 'requirements', area: 'Scope Management',
+      title: 'Unclear & unstable requirements',
+      chain: 'Vague specs → constant rework & re-estimation → scope churn → compounding schedule slip',
+      why: 'When "done" is undefined, every deliverable is re-litigated, and all downstream estimates inherit the ambiguity.',
+      preventive: [
+        { action: 'Write measurable acceptance criteria (Definition of Ready / Done) before build starts', owner: 'Product Owner / BA', effort: 'M', framework: 'Definition of Ready/Done' },
+        { action: 'Freeze requirements via a formal change gate after sign-off; route all later asks through it', owner: 'Sponsor + PM', effort: 'S', framework: 'Change Control Board' },
+        { action: 'Prototype and validate with stakeholders early (mockups, walkthroughs, spikes)', owner: 'Business Analyst', effort: 'S', framework: 'Prototyping / BML' },
+        { action: 'Maintain a traceability matrix linking every task back to an approved requirement', owner: 'PM', effort: 'S', framework: 'Requirements Traceability' }
+      ]
+    },
+    {
+      id: 'planning_fallacy', area: 'Schedule Management',
+      title: 'Optimistic estimation & weak planning',
+      chain: 'Estimates treated as targets (planning fallacy) → no buffer → the first slip cascades into every milestone',
+      why: 'Humans systematically under-estimate; without a structured estimating method and buffers, optimism becomes a schedule.',
+      preventive: [
+        { action: 'Estimate with 3-point / reference-class data, not gut feel or sales targets', owner: 'PM', effort: 'S', framework: 'PERT / reference-class forecasting' },
+        { action: 'Add explicit contingency buffers at task and milestone level (never hide them)', owner: 'PM', effort: 'S', framework: 'Critical Chain Buffer Mgmt' },
+        { action: 'Build a real WBS + dependency map and pressure-test it with the delivery team', owner: 'PM', effort: 'M', framework: 'Work Breakdown Structure' },
+        { action: 'Track schedule variance (SV / SPI) weekly and re-baseline only through change control', owner: 'PMO', effort: 'M', framework: 'Earned Value Management' }
+      ]
+    },
+    {
+      id: 'weak_change_control', area: 'Integration Management',
+      title: 'Weak change & scope control',
+      chain: 'Every "small addition" accepted on its own → cumulative scope inflation → dates/budget never adjusted → overrun',
+      why: 'Individually harmless changes compound; without a gate that prices impact (scope + cost + schedule), creep is invisible until it is fatal.',
+      preventive: [
+        { action: 'Route every change through a Change Control Board that prices impact on scope, cost and schedule', owner: 'Sponsor', effort: 'S', framework: 'Change Control Board' },
+        { action: 'Price each request before accepting: "yes — it adds X weeks and $Y"', owner: 'PM', effort: 'S', framework: 'Scope baseline' },
+        { action: 'Keep a scope baseline and change log; review variance at every status meeting', owner: 'PM', effort: 'S', framework: 'Scope baseline' }
+      ]
+    },
+    {
+      id: 'comms_breakdown', area: 'Communications Management',
+      title: 'Communication & coordination breakdown',
+      chain: 'Silos + missing cadence → surprises, duplicated work, late escalation → decisions made too late to matter',
+      why: 'Most project failures are information failures: the right people learn the wrong thing too late.',
+      preventive: [
+        { action: 'Publish a communication plan + RACI so every deliverable has exactly one accountable owner', owner: 'PM', effort: 'S', framework: 'RACI matrix' },
+        { action: 'Run a weekly status cadence around a single source of truth (dashboard, not slide decks)', owner: 'PM', effort: 'S', framework: 'Status cadence' },
+        { action: 'Define an escalation path with SLAs: issue raised → owner → decision within 48h', owner: 'Sponsor', effort: 'S', framework: 'Escalation SLA' }
+      ]
+    },
+    {
+      id: 'capacity', area: 'Resource Management',
+      title: 'Resource capacity & capability gaps',
+      chain: 'Understaffing + multitasking + attrition → burnout → throughput collapse → schedule slip',
+      why: 'The plan assumed capacity that never existed; when load exceeds ~80% utilisation, throughput actually falls.',
+      preventive: [
+        { action: 'Forecast with velocity/throughput data and plan utilisation ≤ 80%', owner: 'PM', effort: 'S', framework: 'Capacity planning' },
+        { action: 'Limit WIP: fewer concurrent projects per person — "stop starting, start finishing"', owner: 'Delivery Lead', effort: 'S', framework: 'Kanban WIP limits' },
+        { action: 'Cross-train and document to reduce key-person risk; budget for onboarding buffers', owner: 'Delivery Lead', effort: 'M', framework: 'Skills matrix' }
+      ]
+    },
+    {
+      id: 'vendor', area: 'Procurement Management',
+      title: 'External dependency failure',
+      chain: 'Vendor over-promised → gap discovered late (UAT) → no fallback → critical path blocked',
+      why: 'External work sits outside your control but inside your critical path; it needs the strongest risk treatment, not the weakest.',
+      preventive: [
+        { action: 'Run vendor due diligence: reference checks and a technical spike/proof before contract signature', owner: 'Procurement', effort: 'M', framework: 'Vendor scorecard' },
+        { action: 'Write SLAs + exit clauses into contracts; never accept a vendor on the critical path without a fallback', owner: 'Procurement', effort: 'S', framework: 'SLA / exit clause' },
+        { action: 'Bring external milestones into your own status cadence and risk register', owner: 'PM', effort: 'S', framework: 'Risk register' }
+      ]
+    },
+    {
+      id: 'risk_governance', area: 'Risk Management',
+      title: 'Weak risk management & governance',
+      chain: 'No risk register → surprises → firefighting → no contingency → purely reactive management',
+      why: 'Risks that are named early become options; risks that are ignored become emergencies.',
+      preventive: [
+        { action: 'Maintain a live risk register (owner, probability, impact, trigger, agreed response)', owner: 'PM', effort: 'S', framework: 'Risk register' },
+        { action: 'Hold a pre-mortem at kickoff: "imagine we failed — why?" and mitigate the top answers', owner: 'PM', effort: 'S', framework: 'Pre-mortem' },
+        { action: 'Track leading indicators (cycle time, WIP, burndown, blocker age) — not just % complete', owner: 'PMO', effort: 'S', framework: 'Leading indicators' }
+      ]
+    },
+    {
+      id: 'gov_priority', area: 'Stakeholder Engagement',
+      title: 'Governance, sponsorship & priority drift',
+      chain: 'Weak sponsorship + shifting priorities → delayed decisions → team idles or thrashes → schedule slips',
+      why: 'A project without an engaged sponsor and a stable priority is a project without a steering wheel.',
+      preventive: [
+        { action: 'Secure an active sponsor with a signed charter naming decision authority', owner: 'Sponsor', effort: 'S', framework: 'Project charter' },
+        { action: 'Hold a fixed prioritisation cadence (e.g. monthly); park new asks instead of juggling them', owner: 'Sponsor', effort: 'M', framework: 'Prioritisation cadence' },
+        { action: 'Escalate blockers with an impact statement (cost of delay) to force timely decisions', owner: 'PM', effort: 'S', framework: 'Escalation SLA' }
+      ]
+    }
+  ];
+
+  /* ----------------------- failure patterns ---------------------------- */
+  const PATTERNS = [
+    { id: 'planning_fallacy', name: 'Planning Fallacy', rc: 'planning_fallacy', desc: 'Estimates were treated as targets, not forecasts — with no buffer, the first slip cascaded into every milestone.', test: f => !!(f.planning_fallacy && (f.planning_no_buffer || f.planning_slippage || f.planning_baseline)) },
+    { id: 'scope_death_spiral', name: 'Scope-Creep Death Spiral', rc: 'weak_change_control', desc: 'Each "small" addition fed rework and re-estimation, and dates were never re-baselined.', test: f => !!((f.scope_creep || f.scope_changes) && (f.planning_slippage || f.scope_churn)) },
+    { id: 'brooks', name: 'Brooks\u2019s Law', rc: 'capacity', desc: 'Adding or replacing people late in the project made delivery slower, not faster.', test: f => !!(f.res_turnover && (f.planning_slippage || f.res_understaff)) },
+    { id: 'conway', name: 'Conway\u2019s Law', rc: 'comms_breakdown', desc: 'The deliverable mirrored the organisation — siloed teams produced a poorly integrated result.', test: f => !!(f.comms_silo && (f.comms_owner || f.risk_integration)) },
+    { id: 'death_march', name: 'Death March', rc: 'capacity', desc: 'Sustained crunch drove attrition, and attrition made the deadline recede even faster.', test: f => !!(f.res_burnout && (f.res_turnover || f.planning_slippage)) },
+    { id: 'hero_culture', name: 'Hero Culture', rc: 'risk_governance', desc: 'Delivery depended on one or two individuals instead of documented, repeatable process.', test: f => !!(f.risk_keyperson && (f.comms_owner || f.res_understaff)) },
+    { id: 'ninety', name: '90% Syndrome', rc: 'risk_governance', desc: 'Progress stayed "~90% complete" for weeks because completion was never made measurable.', test: f => !!(f.gov_metrics && (f.risk_integration || f.planning_slippage)) },
+    { id: 'student', name: 'Student Syndrome', rc: 'planning_fallacy', desc: 'Real work was compressed into the final stretch, leaving no room for the inevitable surprises.', test: f => !!((f.res_multitask || f.planning_no_buffer) && f.planning_slippage) }
+  ];
+
+  const UNIVERSAL_ACTIONS = [
+    { action: 'Hold a blameless post-mortem within two weeks of closure; publish the learnings', owner: 'PM', effort: 'S', framework: 'Blameless post-mortem' },
+    { action: 'Create a living risk register on day one — owner, probability, impact, trigger, response', owner: 'PM', effort: 'S', framework: 'Risk register' },
+    { action: 'Institute change control: any scope/schedule/budget change requires an impact assessment', owner: 'Sponsor', effort: 'S', framework: 'Change Control Board' },
+    { action: 'Define and agree acceptance criteria for every deliverable before work begins', owner: 'PM', effort: 'S', framework: 'Definition of Done' }
+  ];
+
+  const OUTCOME_LABELS = {
+    delayed: 'Delayed — delivered late',
+    failed: 'Failed — did not meet objectives',
+    cancelled: 'Cancelled before completion',
+    over_budget: 'Over budget',
+    mixed: 'Mixed outcome'
+  };
+
+  /* --------------------------- metrics -------------------------------- */
+  function computeMetrics(p) {
+    const tasks = p.tasks || [];
+    const dated = tasks.filter(t => isDate(t.plannedEnd));
+    const withActual = tasks.filter(t => isDate(t.plannedEnd) && isDate(t.actualEnd));
+    const lateness = [];
+    withActual.forEach(t => {
+      const l = days(t.plannedEnd, t.actualEnd);
+      if (l != null) lateness.push(l);
+    });
+    const lateCount = lateness.filter(l => l > 0).length;
+    const avgSlipDays = lateness.length ? Math.round(lateness.reduce((a, b) => a + b, 0) / lateness.length) : 0;
+    const maxSlipDays = lateness.length ? Math.max.apply(null, lateness) : 0;
+    const latePct = lateness.length ? Math.round((lateCount / lateness.length) * 100) : 0;
+    const neverStarted = tasks.filter(t => t.status === 'never_started');
+    const blocked = tasks.filter(t => t.status === 'blocked');
+
+    const milestones = p.milestones || [];
+    const missed = milestones.filter(m => m.met === false && isDate(m.plannedDate));
+    const slips = missed.map(m => days(m.plannedDate, m.actualDate)).filter(x => x != null);
+    const avgMilestoneSlip = slips.length ? Math.round(slips.reduce((a, b) => a + b, 0) / slips.length) : 0;
+
+    // slippage trend: missed milestones sorted by planned date, slip growing
+    let slipTrending = false;
+    const sortedMissed = missed.filter(m => isDate(m.actualDate)).sort((a, b) => new Date(a.plannedDate) - new Date(b.plannedDate));
+    if (sortedMissed.length >= 2) {
+      const d = sortedMissed.map(m => days(m.plannedDate, m.actualDate)).filter(x => x != null);
+      let rising = 0;
+      for (let i = 1; i < d.length; i++) if (d[i] > d[i - 1] + 5) rising++;
+      slipTrending = rising >= 1;
+    }
+
+    // scope-change signals from notes
+    const scopeText = (p.notes || []).map(n => (n.text || '').toLowerCase()).join('\n');
+    const scopeSignals =
+      (scopeText.match(/scope|requirement|change request|feature|gold.?plat|creep/g) || []).length +
+      (p.symptoms || []).filter(s => ['scope_creep', 'gold_plating', 'requirements', 'signoff'].includes(s)).length * 2;
+
+    return {
+      taskCount: tasks.length,
+      datedCount: dated.length,
+      withActualCount: withActual.length,
+      lateCount,
+      latePct,
+      avgSlipDays,
+      maxSlipDays,
+      neverStartedCount: neverStarted.length,
+      blockedCount: blocked.length,
+      milestoneTotal: milestones.length,
+      milestoneMissed: missed.length,
+      milestoneHitPct: milestones.length ? Math.round(((milestones.length - missed.length) / milestones.length) * 100) : null,
+      avgMilestoneSlip,
+      slipTrending,
+      scopeSignals,
+      noteCount: (p.notes || []).length,
+      redFlagCount: (p.symptoms || []).length
+    };
+  }
+
+  /* ------------------------- metric triggers --------------------------- */
+  function applyMetricTriggers(p, m, add) {
+    if (m.datedCount > 0 && m.latePct >= 50) {
+      add('planning_slippage', { type: 'metric', text: m.latePct + '% of dated tasks finished late' }, { sevFloor: 3.5 + Math.min(1, m.latePct / 100) });
+    }
+    if (m.avgMilestoneSlip >= 15) {
+      add('planning_slippage', { type: 'metric', text: 'Milestones slipped ' + m.avgMilestoneSlip + ' days on average' }, { sevFloor: 4 });
+    }
+    if (m.maxSlipDays >= 45) {
+      add('planning_slippage', { type: 'metric', text: 'Worst single task slip: ' + m.maxSlipDays + ' days' }, { sevFloor: 4 });
+    }
+    if (m.taskCount > 0 && m.datedCount < m.taskCount) {
+      add('planning_baseline', { type: 'metric', text: (m.taskCount - m.datedCount) + ' task(s) had no planned date — no baseline to measure against' });
+    }
+    if (m.scopeSignals >= 3) {
+      add('scope_changes', { type: 'metric', text: m.scopeSignals + ' scope-change signals detected across notes & checklist' }, { sevFloor: 3.5 + Math.min(1, m.scopeSignals * 0.08) });
+    }
+    if (m.neverStartedCount > 0) {
+      add('scope_churn', { type: 'metric', text: m.neverStartedCount + ' task(s) never started — scope was never right-sized to capacity' }, { sevFloor: 3 });
+    }
+    if (m.neverStartedCount + m.blockedCount >= 2) {
+      add('res_understaff', { type: 'metric', text: m.neverStartedCount + ' never-started + ' + m.blockedCount + ' blocked task(s) — capacity or clarity problem' }, { sevFloor: 3.5 });
+    }
+    if (m.blockedCount > 0) {
+      add('risk_noregister', { type: 'metric', text: m.blockedCount + ' blocked task(s) with no visible resolution path' });
+    }
+    if (m.slipTrending) {
+      add('planning_slippage', { type: 'metric', text: 'Slippage is compounding — each missed milestone slipped further than the last' }, { sevFloor: 4 });
+    }
+    if (m.withActualCount === 0 && m.taskCount > 0) {
+      add('gov_metrics', { type: 'metric', text: 'No task has actual dates — progress was never measured' });
+    }
+    if ((p.outcome === 'cancelled' || p.outcome === 'failed') && !p.symptoms.length && !p.notes.length) {
+      add('gov_sponsor', { type: 'metric', text: 'Project ' + p.outcome + ' with almost no documented evidence — governance vacuum' });
+    }
+  }
+
+  /* ----------------------------- analyze ------------------------------ */
+  function normalize(input) {
+    const p = input || {};
+    return {
+      name: (p.name || 'Unnamed project').trim(),
+      type: p.type || '',
+      industry: p.industry || '',
+      outcome: p.outcome || 'delayed',
+      methodology: p.methodology || '',
+      teamSize: p.teamSize || null,
+      complexity: p.complexity || null,
+      plannedStart: p.plannedStart || '',
+      plannedEnd: p.plannedEnd || '',
+      actualEnd: p.actualEnd || '',
+      description: p.description || '',
+      tasks: (p.tasks || []).map(t => ({ title: t.title || '', owner: t.owner || '', status: t.status || 'done', plannedEnd: t.plannedEnd || '', actualEnd: t.actualEnd || '' })),
+      notes: (p.notes || []).map(n => ({ text: n.text || '', source: n.source || '', date: n.date || '' })),
+      milestones: (p.milestones || []).map(m => ({ name: m.name || '', plannedDate: m.plannedDate || '', actualDate: m.actualDate || '', met: !!m.met })),
+      symptoms: (p.symptoms || []).slice()
+    };
+  }
+
+  function analyze(input) {
+    const p = normalize(input);
+    const m = computeMetrics(p);
+
+    // findings accumulation
+    const findings = {};
+    function add(id, ev, opts) {
+      const cat = CATALOG[id];
+      if (!cat) return;
+      if (!findings[id]) findings[id] = { id: id, agent: cat.agent, title: cat.title, detail: cat.detail, severity: cat.sev, confidence: cat.conf, rcs: cat.rcs, evidence: [] };
+      const f = findings[id];
+      if (ev) f.evidence.push(ev);
+      opts = opts || {};
+      if (opts.sevFloor) f.severity = Math.max(f.severity, opts.sevFloor);
+      if (opts.sevBoost) f.severity = clamp(f.severity + opts.sevBoost, 0.5, 5);
+      if (opts.confBoost) f.confidence = clamp(f.confidence + opts.confBoost, 0.2, 0.97);
+      if (f.evidence.length > 5) f.evidence = f.evidence.slice(0, 5);
+    }
+
+    // 1) notes text mining (incl. the free-text project brief)
+    const allNotes = (p.notes || []).concat(
+      p.description ? [{ text: p.description, source: 'project brief', date: '' }] : []
+    );
+    allNotes.forEach(n => {
+      const text = (n.text || '').toLowerCase();
+      NOTE_PATTERNS.forEach(pt => {
+        if (pt.re.test(text)) {
+          add(pt.finding, { type: 'note', text: excerpt(n.text), source: n.source || 'project note', date: n.date || '' }, { sevBoost: 0.2, confBoost: 0.05 });
+        }
+      });
+    });
+
+    // 2) red-flag checklist
+    (p.symptoms || []).forEach(sid => {
+      const s = SYMPTOMS.find(x => x.id === sid);
+      if (s) add(s.finding, { type: 'symptom', text: s.label, source: 'red-flag checklist' }, { sevBoost: 0.25, confBoost: 0.06 });
+    });
+
+    // 3) metric triggers
+    applyMetricTriggers(p, m, add);
+
+    // 4) finalize severities by evidence volume
+    Object.values(findings).forEach(f => {
+      const n = f.evidence.length;
+      if (n > 1) {
+        f.severity = clamp(f.severity + 0.3 * (n - 1), 0.5, 5);
+        f.confidence = clamp(f.confidence + 0.06 * (n - 1), 0.2, 0.97);
+      }
+    });
+
+    // build per-agent results
+    const agents = AGENTS.map(a => {
+      const fs = Object.values(findings).filter(f => f.agent === a.id);
+      const top = fs.slice().sort((x, y) => y.severity - x.severity).slice(0, 3);
+      const score = top.length ? Math.round((top.reduce((s, f) => s + f.severity, 0) / top.length / 5) * 100) : 0;
+      return {
+        id: a.id, name: a.name, icon: a.icon, color: a.color, desc: a.desc,
+        score, verdict: verdictFor(score),
+        findings: fs.map(f => ({ id: f.id, title: f.title, detail: f.detail, severity: f.severity, confidence: f.confidence, severityLabel: severityLabel(f.severity), evidence: f.evidence }))
+          .sort((x, y) => y.severity - x.severity)
+      };
+    });
+
+    // build root causes
+    const rcMap = {};
+    ROOT_CAUSES.forEach(rc => { rcMap[rc.id] = { rc, findings: [], raw: 0, confSum: 0 }; });
+    Object.values(findings).forEach(f => {
+      (f.rcs || []).forEach(rid => {
+        const r = rcMap[rid];
+        if (!r) return;
+        r.findings.push(f);
+        r.raw += f.severity * f.confidence;
+        r.confSum += f.confidence;
+      });
+    });
+
+    // patterns
+    const triggeredPatterns = PATTERNS.filter(pt => pt.test(findings));
+    triggeredPatterns.forEach(pt => { if (rcMap[pt.rc]) rcMap[pt.rc].raw += 0.6; });
+
+    let entries = Object.values(rcMap).filter(r => r.findings.length > 0);
+    const maxRaw = entries.length ? Math.max.apply(null, entries.map(r => r.raw)) : 0;
+
+    entries = entries.map(r => {
+      const score = maxRaw ? Math.round((r.raw / maxRaw) * 100) : 0;
+      const severity = r.raw >= 9 ? 'Critical' : r.raw >= 6 ? 'High' : r.raw >= 3.5 ? 'Moderate' : r.raw >= 1.5 ? 'Low' : 'Minor';
+      const confidence = r.findings.length ? r.confSum / r.findings.length : 0.5;
+      const preventive = r.rc.preventive.map(a => Object.assign({}, a, { cause: r.rc.title, area: r.rc.area }));
+      return {
+        id: r.rc.id, area: r.rc.area, title: r.rc.title, chain: r.rc.chain, why: r.rc.why,
+        score, severity, confidence: Math.round(confidence * 100) / 100,
+        findings: r.findings.map(f => f.id),
+        evidence: r.findings.map(f => f.evidence[0]).filter(Boolean).slice(0, 4),
+        preventive
+      };
+    }).sort((a, b) => b.raw !== a.raw ? (b.raw - a.raw) : (b.score - a.score));
+    entries.forEach((e, i) => { e.rank = i + 1; });
+
+    // action plan (flattened, deduped)
+    const seen = {};
+    const plan = [];
+    entries.forEach(e => e.preventive.forEach(a => {
+      const key = a.action.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = 1;
+      plan.push(a);
+    }));
+    UNIVERSAL_ACTIONS.forEach(a => {
+      const key = a.action.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = 1;
+      plan.push(Object.assign({}, a, { cause: 'General good practice', area: 'Cross-cutting' }));
+    });
+    plan.forEach((a, i) => { a.id = i + 1; });
+
+    // summary
+    const top = entries.slice(0, 3);
+    const outcome = OUTCOME_LABELS[p.outcome] || p.outcome;
+    const sents = [];
+    sents.push('"' + p.name + '"' + (p.type ? ' (' + p.type + ')' : '') + ' ended as ' + outcome + '.');
+    if (m.datedCount > 0) {
+      sents.push('Of ' + m.datedCount + ' task(s) with deadlines, ' + m.latePct + '% finished late — on average ' + m.avgSlipDays + ' days behind, with a worst single slip of ' + m.maxSlipDays + ' days.');
+      if (m.milestoneTotal > 0) sents.push(m.milestoneMissed + ' of ' + m.milestoneTotal + ' milestone(s) were missed, slipping ' + m.avgMilestoneSlip + ' days on average.' + (m.slipTrending ? ' Slippage is compounding, not recovering.' : ''));
+    }
+    if (top.length) {
+      const names = top.map(t => t.title);
+      const joined = names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+      sents.push('Root-cause analysis points to ' + joined + ' as the ' + (names.length === 1 ? 'dominant driver' : 'primary drivers') + ' — an upstream problem, not an execution-only one.');
+    }
+    if (triggeredPatterns.length) {
+      sents.push('The evidence matches ' + triggeredPatterns.length + ' classic failure pattern(s): ' + triggeredPatterns.map(x => x.name).join(', ') + '.');
+    }
+    sents.push('The preventive action plan below lists ' + plan.length + ' counter-measures, ranked by root-cause priority, with owners, effort and the framework each draws on.');
+
+    const riskScore = Math.round(agents.reduce((s, a) => s + a.score, 0) / agents.length);
+    const confidence = entries.length ? Math.round(entries.slice(0, 3).reduce((s, e) => s + e.confidence, 0) / Math.min(3, entries.length) * 100) : 0;
+
+    return {
+      project: p,
+      metrics: m,
+      agents,
+      rootCauses: entries,
+      patterns: triggeredPatterns,
+      plan,
+      summary: { outcome, headline: top.length ? ('Primary root cause: ' + top[0].title) : 'Insufficient evidence', exec: sents.join(' '), riskScore, confidence }
+    };
+  }
+
+  /* ------------------------------ demos -------------------------------- */
+  const DEMO_A = {
+    name: 'Project Meridian',
+    type: 'Software — CRM rollout',
+    industry: 'Financial services',
+    outcome: 'delayed',
+    methodology: 'Hybrid (waterfall-ish)',
+    teamSize: 12,
+    complexity: 4,
+    plannedStart: '2025-02-03', plannedEnd: '2025-09-19', actualEnd: '2026-03-13',
+    description: 'Enterprise CRM replacement for 400 users. Originally sold as a 9-month programme for $1.4M.',
+    tasks: [
+      { title: 'Requirements gathering', owner: 'BA (Priya)', status: 'done', plannedEnd: '2025-03-14', actualEnd: '2025-04-11' },
+      { title: 'Vendor selection', owner: 'Procurement', status: 'done', plannedEnd: '2025-03-07', actualEnd: '2025-03-28' },
+      { title: 'Data migration mapping', owner: 'Data team', status: 'done', plannedEnd: '2025-05-16', actualEnd: '2025-08-08' },
+      { title: 'ERP integration', owner: 'Integrations', status: 'done', plannedEnd: '2025-07-11', actualEnd: '2025-11-21' },
+      { title: 'UI customisation', owner: 'Front-end', status: 'done', plannedEnd: '2025-06-20', actualEnd: '2025-10-03' },
+      { title: 'User acceptance testing', owner: 'QA + business', status: 'done', plannedEnd: '2025-08-22', actualEnd: '2026-01-16' },
+      { title: 'Training & rollout', owner: 'Change mgmt', status: 'done', plannedEnd: '2025-09-19', actualEnd: '2026-03-13' },
+      { title: 'Reporting / analytics module', owner: 'Data team', status: 'never_started', plannedEnd: '2025-08-01', actualEnd: '' },
+      { title: 'Mobile app sync', owner: 'Mobile team', status: 'blocked', plannedEnd: '2025-08-29', actualEnd: '' },
+      { title: 'Data quality cleanup', owner: 'Data team', status: 'never_started', plannedEnd: '2025-06-30', actualEnd: '' }
+    ],
+    notes: [
+      { text: 'The VP kept adding "must-have" features well past the requirements freeze — by June we had ~40% more scope than was signed off.', source: 'PM', date: '2025-06-04' },
+      { text: 'Requirements were signed off without detailed acceptance criteria; QA kept asking what "done" actually meant.', source: 'QA lead', date: '2025-03-20' },
+      { text: 'Marketing had no idea the launch date had moved twice — they found out in the hallway.', source: 'PM', date: '2025-08-12' },
+      { text: 'We were promised three data engineers in Q2; only one ever started, and she quit in October.', source: 'Eng lead', date: '2025-10-14' },
+      { text: 'The ERP integration team and the UI team never met — each assumed the other was handling the field mapping.', source: 'Scrum master', date: '2025-09-02' },
+      { text: 'The original 9-month estimate was a guess by sales to win the deal — no one ever challenged it.', source: 'PM', date: '2025-02-10' },
+      { text: 'No one tracked a single metric until the steering committee asked for a status report in month 10.', source: 'PMO', date: '2025-12-01' },
+      { text: 'Two senior developers resigned after the third "crunch weekend" in a row.', source: 'HR', date: '2025-11-07' },
+      { text: 'The vendor\'s API turned out not to support bulk updates — we discovered this during UAT.', source: 'QA lead', date: '2026-01-05' },
+      { text: 'We cut the QA budget by 30% mid-project to "save money", then paid for it twice over in rework.', source: 'Finance', date: '2025-07-18' }
+    ],
+    milestones: [
+      { name: 'Kickoff', plannedDate: '2025-02-03', actualDate: '2025-02-03', met: true },
+      { name: 'Requirements freeze', plannedDate: '2025-03-14', actualDate: '2025-04-25', met: false },
+      { name: 'Vendor contract signed', plannedDate: '2025-03-28', actualDate: '2025-04-10', met: false },
+      { name: 'MVP go-live', plannedDate: '2025-08-29', actualDate: '2026-02-20', met: false },
+      { name: 'Full rollout', plannedDate: '2025-09-19', actualDate: '2026-03-13', met: false }
+    ],
+    symptoms: ['requirements', 'scope_creep', 'late_decisions', 'multitask', 'no_owner', 'meetings', 'vendor', 'burnout', 'no_buffer', 'no_tracking', 'silos', 'turnover', 'no_testing', 'hero']
+  };
+
+  const DEMO_B = {
+    name: 'HQ Relocation — 14th Floor',
+    type: 'Operations / Facilities move',
+    industry: 'Insurance',
+    outcome: 'over_budget',
+    methodology: 'Waterfall (Gantt-driven)',
+    teamSize: 6,
+    complexity: 3,
+    plannedStart: '2025-04-01', plannedEnd: '2025-07-31', actualEnd: '2026-01-30',
+    description: 'Move 180 staff to a new floor with fit-out, cabling, furniture and IT.',
+    tasks: [
+      { title: 'Site shortlist & survey', owner: 'Facilities', status: 'done', plannedEnd: '2025-04-30', actualEnd: '2025-05-16' },
+      { title: 'Lease negotiation', owner: 'Legal', status: 'done', plannedEnd: '2025-05-23', actualEnd: '2025-08-01' },
+      { title: 'Fit-out & cabling', owner: 'Contractor', status: 'done', plannedEnd: '2025-06-27', actualEnd: '2025-09-19' },
+      { title: 'Furniture & IT procurement', owner: 'Procurement', status: 'done', plannedEnd: '2025-06-13', actualEnd: '2025-10-02' },
+      { title: 'Staff comms & seating plan', owner: 'HR', status: 'never_started', plannedEnd: '2025-07-11', actualEnd: '' },
+      { title: 'Move weekend execution', owner: 'Facilities', status: 'blocked', plannedEnd: '2025-07-25', actualEnd: '' }
+    ],
+    notes: [
+      { text: 'The landlord\'s approval for the floor plan took six weeks — nobody had factored that into the schedule.', source: 'Facilities', date: '2025-06-03' },
+      { text: 'We signed the lease before confirming the fit-out permit; everything stopped for two months.', source: 'Legal', date: '2025-08-20' },
+      { text: 'Staff found out about the move date from a leaked email, not from management.', source: 'HR', date: '2025-07-02' },
+      { text: 'Two departments refused the seating plan and there was no single owner to arbitrate.', source: 'HR', date: '2025-11-11' },
+      { text: 'Furniture orders were placed after the budget was cut 20%, so cheaper — and slower — suppliers were used.', source: 'Procurement', date: '2025-09-15' },
+      { text: 'The move weekend collided with year-end close — no one checked the finance calendar.', source: 'Facilities', date: '2025-12-05' }
+    ],
+    milestones: [
+      { name: 'Lease signed', plannedDate: '2025-05-23', actualDate: '2025-08-01', met: false },
+      { name: 'Fit-out complete', plannedDate: '2025-06-27', actualDate: '2025-09-19', met: false },
+      { name: 'Move weekend', plannedDate: '2025-07-25', actualDate: '2026-01-09', met: false }
+    ],
+    symptoms: ['vendor', 'no_buffer', 'sponsor', 'meetings', 'late_decisions', 'no_owner', 'signoff', 'no_risk']
+  };
+
+  const ENGINE = { analyze, severityLabel, verdictFor, AGENTS, SYMPTOMS, ROOT_CAUSES, OUTCOME_LABELS, DEMO_A, DEMO_B };
+  if (typeof module !== 'undefined' && module.exports) module.exports = ENGINE;
+  else if (typeof window !== 'undefined') window.ENGINE = ENGINE;
+})();
+
+</script>
+
+<script>
+/* ============================ UI layer ============================ */
+'use strict';
+
+const state = { project: blankProject(), report: null, step: 0, animToken: 0 };
+
+function blankProject(){
+  return { name:'', type:'', industry:'', outcome:'delayed', methodology:'', teamSize:null, complexity:3,
+    plannedStart:'', plannedEnd:'', actualEnd:'', description:'', tasks:[], notes:[], milestones:[], symptoms:[] };
+}
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function complexityName(n){
+  n = +n;
+  return ['','Very low (1)','Low (2)','Moderate (3)','High (4)','Very high (5)'][n] || 'Moderate (3)';
+}
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+/* ---------- stepper & navigation ---------- */
+function setStep(n){
+  state.step = n;
+  const ids = ['screen-home','screen-profile','screen-evidence','screen-run','screen-report'];
+  ids.forEach((id,i)=> document.getElementById(id).classList.toggle('active', i===n));
+  document.querySelectorAll('.step').forEach(el=>{
+    const s = +el.dataset.step;
+    el.classList.toggle('active', s===n);
+    el.classList.toggle('done', s<n);
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function goHome(){ setStep(0); }
+function startNew(){ state.project = blankProject(); state.report = null; fillProfileForm(); renderEvidence(); setStep(1); }
+function toProfile(){ setStep(1); }
+function toEvidence(){ collectProfile(); renderEvidence(); setStep(2); }
+
+/* ---------- profile ---------- */
+function fillProfileForm(){
+  const p = state.project;
+  document.getElementById('f-name').value = p.name;
+  document.getElementById('f-type').value = p.type;
+  document.getElementById('f-industry').value = p.industry;
+  document.getElementById('f-outcome').value = p.outcome;
+  document.getElementById('f-method').value = p.methodology || '';
+  document.getElementById('f-team').value = p.teamSize || '';
+  document.getElementById('f-ps').value = p.plannedStart || '';
+  document.getElementById('f-pe').value = p.plannedEnd || '';
+  document.getElementById('f-ae').value = p.actualEnd || '';
+  document.getElementById('f-cx').value = p.complexity || 3;
+  document.getElementById('f-desc').value = p.description || '';
+  document.getElementById('cx-label').textContent = complexityName(p.complexity || 3);
+}
+function collectProfile(){
+  const p = state.project;
+  p.name = document.getElementById('f-name').value.trim() || 'Unnamed project';
+  p.type = document.getElementById('f-type').value.trim();
+  p.industry = document.getElementById('f-industry').value.trim();
+  p.outcome = document.getElementById('f-outcome').value;
+  p.methodology = document.getElementById('f-method').value;
+  p.teamSize = document.getElementById('f-team').value ? +document.getElementById('f-team').value : null;
+  p.plannedStart = document.getElementById('f-ps').value;
+  p.plannedEnd = document.getElementById('f-pe').value;
+  p.actualEnd = document.getElementById('f-ae').value;
+  p.complexity = +document.getElementById('f-cx').value;
+  p.description = document.getElementById('f-desc').value.trim();
+}
+
+/* ---------- evidence tabs ---------- */
+function switchTab(tab){
+  document.querySelectorAll('#ev-tabs .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+  ['tasks','notes','miles','symptoms'].forEach(id=>{
+    document.getElementById('panel-'+id).classList.toggle('active', id===tab);
+  });
+}
+function collectEvidence(){
+  const p = state.project;
+  p.tasks = p.tasks.map(t=>({title:t.title,owner:t.owner,status:t.status,plannedEnd:t.plannedEnd,actualEnd:t.actualEnd}));
+  p.notes = p.notes.map(n=>({text:n.text,source:n.source,date:n.date}));
+  p.milestones = p.milestones.map(m=>({name:m.name,plannedDate:m.plannedDate,actualDate:m.actualDate,met:m.met}));
+}
+
+function renderEvidence(){
+  renderTasks(); renderNotes(); renderMiles(); renderSymptoms(); updateCounts();
+}
+function updateCounts(){
+  document.getElementById('cnt-tasks').textContent = state.project.tasks.length;
+  document.getElementById('cnt-notes').textContent = state.project.notes.length;
+  document.getElementById('cnt-miles').textContent = state.project.milestones.length;
+  document.getElementById('cnt-symptoms').textContent = state.project.symptoms.length;
+}
+
+/* tasks */
+function addTask(){ state.project.tasks.push({title:'',owner:'',status:'done',plannedEnd:'',actualEnd:''}); renderTasks(); updateCounts(); }
+function updTask(i,f,v){ state.project.tasks[i][f]=v; }
+function delTask(i){ state.project.tasks.splice(i,1); renderTasks(); updateCounts(); }
+function renderTasks(){
+  const b = document.getElementById('tasks-body');
+  if(!state.project.tasks.length){ b.innerHTML = '<tr><td colspan="6" class="muted small" style="padding:18px 10px">No tasks yet — add some, or load the sample.</td></tr>'; return; }
+  b.innerHTML = state.project.tasks.map((t,i)=>`
+    <tr>
+      <td><input type="text" value="${esc(t.title)}" placeholder="Task name" oninput="updTask(${i},'title',this.value)"></td>
+      <td><input type="text" value="${esc(t.owner)}" placeholder="Owner" oninput="updTask(${i},'owner',this.value)"></td>
+      <td><select onchange="updTask(${i},'status',this.value)">
+        ${['done','late','in_progress','blocked','never_started','cancelled'].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('')}
+      </select></td>
+      <td><input type="date" value="${esc(t.plannedEnd)}" oninput="updTask(${i},'plannedEnd',this.value)"></td>
+      <td><input type="date" value="${esc(t.actualEnd)}" oninput="updTask(${i},'actualEnd',this.value)"></td>
+      <td><button class="row-del" title="Remove" onclick="delTask(${i})">✕</button></td>
+    </tr>`).join('');
+}
+/* notes */
+function addNote(){ state.project.notes.push({text:'',source:'',date:''}); renderNotes(); updateCounts(); }
+function updNote(i,f,v){ state.project.notes[i][f]=v; }
+function delNote(i){ state.project.notes.splice(i,1); renderNotes(); updateCounts(); }
+function renderNotes(){
+  const b = document.getElementById('notes-body');
+  if(!state.project.notes.length){ b.innerHTML = '<p class="muted small" style="padding:10px 0">No notes yet — paste meeting notes, emails or retrospectives.</p>'; return; }
+  b.innerHTML = state.project.notes.map((n,i)=>`
+    <div style="border:1px solid #eef2f7;border-radius:10px;padding:12px;margin-bottom:10px;background:#fbfcfe">
+      <textarea placeholder="What happened? e.g. “The VP kept adding features after the freeze…”" oninput="updNote(${i},'text',this.value)">${esc(n.text)}</textarea>
+      <div class="grid g2" style="margin-top:8px">
+        <input type="text" placeholder="Source (who said it)" value="${esc(n.source)}" oninput="updNote(${i},'source',this.value)">
+        <input type="date" value="${esc(n.date)}" oninput="updNote(${i},'date',this.value)">
+      </div>
+      <div style="text-align:right;margin-top:6px"><button class="btn btn-danger btn-sm" onclick="delNote(${i})">Remove</button></div>
+    </div>`).join('');
+}
+/* milestones */
+function addMile(){ state.project.milestones.push({name:'',plannedDate:'',actualDate:'',met:false}); renderMiles(); updateCounts(); }
+function updMile(i,f,v){ if(f==='met'){ state.project.milestones[i].met = v==='true'; } else { state.project.milestones[i][f]=v; } }
+function delMile(i){ state.project.milestones.splice(i,1); renderMiles(); updateCounts(); }
+function renderMiles(){
+  const b = document.getElementById('miles-body');
+  if(!state.project.milestones.length){ b.innerHTML = '<tr><td colspan="5" class="muted small" style="padding:18px 10px">No milestones yet.</td></tr>'; return; }
+  b.innerHTML = state.project.milestones.map((m,i)=>`
+    <tr>
+      <td><input type="text" value="${esc(m.name)}" placeholder="Milestone name" oninput="updMile(${i},'name',this.value)"></td>
+      <td><input type="date" value="${esc(m.plannedDate)}" oninput="updMile(${i},'plannedDate',this.value)"></td>
+      <td><input type="date" value="${esc(m.actualDate)}" oninput="updMile(${i},'actualDate',this.value)"></td>
+      <td><select onchange="updMile(${i},'met',this.value)">
+        <option value="false" ${!m.met?'selected':''}>Missed</option>
+        <option value="true" ${m.met?'selected':''}>Met</option>
+      </select></td>
+      <td><button class="row-del" title="Remove" onclick="delMile(${i})">✕</button></td>
+    </tr>`).join('');
+}
+/* symptoms */
+function toggleSym(id){
+  const i = state.project.symptoms.indexOf(id);
+  if(i>=0) state.project.symptoms.splice(i,1); else state.project.symptoms.push(id);
+  renderSymptoms(); updateCounts();
+}
+function renderSymptoms(){
+  const wrap = document.getElementById('symptoms-body');
+  const groups = {};
+  ENGINE.AGENTS.forEach(a=>groups[a.id]=[]);
+  ENGINE.SYMPTOMS.forEach(s=>groups[s.agent].push(s));
+  let html = '';
+  ENGINE.AGENTS.forEach(a=>{
+    const items = groups[a.id];
+    html += `<div class="sym-group"><h4><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${a.color}"></span>${a.name}</h4><div class="sym-grid">`;
+    html += items.map(s=>{
+      const on = state.project.symptoms.includes(s.id);
+      return `<label class="sym ${on?'checked':''}"><input type="checkbox" ${on?'checked':''} onchange="toggleSym('${s.id}')">${esc(s.label)}</label>`;
+    }).join('');
+    html += '</div></div>';
+  });
+  wrap.innerHTML = html;
+}
+
+function fillSample(key){
+  const demo = key==='A' ? ENGINE.DEMO_A : ENGINE.DEMO_B;
+  state.project.tasks = clone(demo.tasks);
+  state.project.notes = clone(demo.notes);
+  state.project.milestones = clone(demo.milestones);
+  state.project.symptoms = clone(demo.symptoms);
+  renderEvidence();
+  return false;
+}
+
+/* ---------- demo loading ---------- */
+function loadDemo(key){
+  const demo = key==='A' ? ENGINE.DEMO_A : ENGINE.DEMO_B;
+  state.project = clone(demo);
+  fillProfileForm();
+  renderEvidence();
+  runAnalysis();
+}
+
+/* ---------- agent run animation ---------- */
+const AGENT_LINES = {
+  planning:   ['Parsing task schedule…','Computing lateness & milestone slip…','Checking buffers, dependencies & baselines…'],
+  scope:      ['Scanning notes for scope signals…','Counting change requests & gold-plating…','Assessing requirement clarity…'],
+  comms:      ['Mining notes for silos & surprises…','Checking cadence, ownership & escalation…','Mapping stakeholder blind spots…'],
+  resources:  ['Auditing staffing vs plan…','Detecting burnout, attrition & multitasking…','Reviewing vendors & budget cuts…'],
+  risk:       ['Checking for a risk register…','Looking for key-person & contingency gaps…','Scanning late-stage integration surprises…'],
+  governance: ['Reviewing sponsorship & decisions…','Checking for metrics & visibility…','Assessing priority stability…']
+};
+
+function renderAgentGrid(){
+  const g = document.getElementById('agent-grid');
+  g.innerHTML = ENGINE.AGENTS.map(a=>`
+    <div class="agent-card" id="acard-${a.id}">
+      <div class="top">
+        <div class="ic" style="background:${a.color}">${a.icon}</div>
+        <div class="nm">${esc(a.name)}</div>
+        <span class="st pending" id="ast-${a.id}">Pending</span>
+      </div>
+      <div class="log" id="alog-${a.id}">Queued…</div>
+      <div class="res">
+        <div class="mini-bar"><span id="abar-${a.id}" style="background:${a.color}"></span></div>
+        <span class="small" id="aver-${a.id}" style="font-weight:700;white-space:nowrap"></span>
+      </div>
+    </div>`).join('');
+}
+function setAgentStatus(id, status, log){
+  const card = document.getElementById('acard-'+id);
+  const st = document.getElementById('ast-'+id);
+  const lg = document.getElementById('alog-'+id);
+  if(!card) return;
+  card.className = 'agent-card ' + (status==='running'?'running':status==='done'?'done':'');
+  st.className = 'st '+status;
+  st.textContent = status==='running'?'Running':status==='done'?'Done':'Pending';
+  if(log) lg.textContent = log;
+}
+
+async function runAnalysis(){
+  collectProfile(); collectEvidence();
+  setStep(3);
+  const token = ++state.animToken;
+  renderAgentGrid();
+  document.getElementById('run-footer').innerHTML = '<button class="btn btn-ghost btn-sm" onclick="skipAnimation()">Skip animation ⏭</button>';
+  const bar = document.getElementById('run-bar'); bar.style.width = '0%';
+  const agents = ENGINE.AGENTS;
+  const steps = agents.length * (3 + 1);
+  let progress = 0;
+  function bump(){ progress++; bar.style.width = Math.round(progress/steps*100)+'%'; }
+
+  for(let i=0;i<agents.length;i++){
+    if(token!==state.animToken) return;
+    const a = agents[i];
+    setAgentStatus(a.id,'running','Investigating…'); bump();
+    await sleep(420);
+    for(const line of AGENT_LINES[a.id]){
+      if(token!==state.animToken) return;
+      setAgentStatus(a.id,'running',line); bump();
+      await sleep(230);
+    }
+  }
+  finishRun();
+}
+
+function finishRun(){
+  if(state.animToken===0) return;
+  state.report = ENGINE.analyze(state.project);
+  const bar = document.getElementById('run-bar');
+  if(bar) bar.style.width = '100%';
+  ENGINE.AGENTS.forEach(a=>{
+    const r = state.report.agents.find(x=>x.id===a.id);
+    const n = r ? r.findings.length : 0;
+    setAgentStatus(a.id,'done', n ? n+' finding(s) found' : 'No significant issues');
+    const mini = document.getElementById('abar-'+a.id);
+    const ver = document.getElementById('aver-'+a.id);
+    if(mini) mini.style.width = (r?r.score:0)+'%';
+    if(ver) ver.textContent = r ? r.score+' · '+r.verdict : '';
+  });
+  const top = state.report.rootCauses[0];
+  document.getElementById('run-footer').innerHTML = `
+    <div class="card" style="text-align:left;max-width:640px;margin:0 auto">
+      ${top ? `
+        <div class="small muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:800">Primary root cause</div>
+        <div style="font-size:19px;font-weight:800;margin:6px 0">${esc(top.title)}</div>
+        <div class="muted small" style="margin-bottom:14px">${state.report.rootCauses.length} root cause(s) identified · overall risk index ${state.report.summary.riskScore}/100 · ${state.report.summary.confidence}% confidence</div>`
+      : `<div class="muted">Not enough evidence to isolate root causes — add more notes, tasks or red flags and re-run.</div>`}
+      <button class="btn btn-primary" onclick="showReport()">View full report →</button>
+    </div>`;
+}
+function skipAnimation(){
+  state.animToken++;
+  if(!state.report){
+    collectProfile(); collectEvidence();
+    state.report = ENGINE.analyze(state.project);
+  }
+  finishRun();
+  showReport();
+}
+function showReport(){ renderReport(); setStep(4); }
+
+/* ---------- report rendering ---------- */
+function sevBadge(label){
+  return `<span class="chip sev-${label}">${label}</span>`;
+}
+function scoreColor(score){ return score>=80?'var(--crit)':score>=60?'var(--high)':score>=40?'var(--mod)':'var(--good)'; }
+
+function renderReport(){
+  const r = state.report;
+  if(!r){ setStep(3); return; }
+  const p = r.project, m = r.metrics, s = r.summary;
+  const body = document.getElementById('report-body');
+  const meta = [p.type, p.industry, p.methodology, p.teamSize? p.teamSize+' people':''].filter(Boolean).join(' · ');
+  const daterange = (p.plannedStart||p.actualEnd) ? ` · ${p.plannedStart||'?'} → ${p.actualEnd||p.plannedEnd||'?'}` : '';
+  const findingTitle = {};
+  r.agents.forEach(a=>a.findings.forEach(f=>findingTitle[f.id]=f.title));
+
+  let html = '';
+
+  /* title block */
+  html += `<div class="card">
+    <div class="rpt-title">
+      <div style="flex:1;min-width:240px">
+        <div class="small muted" style="text-transform:uppercase;letter-spacing:.08em;font-weight:800">Root-cause autopsy report</div>
+        <h1>${esc(p.name)}</h1>
+        <div class="meta-line">${esc(meta)}${esc(daterange)}</div>
+        <div class="meta-line">Generated ${new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+        <span class="badge outcome">⚑ ${esc(s.outcome)}</span>
+        <span class="badge risk">Risk index ${s.riskScore}/100</span>
+        <span class="badge conf">${s.confidence}% confidence</span>
+      </div>
+    </div>
+  </div>`;
+
+  /* executive summary */
+  html += `<div class="card">
+    <h2 style="margin-top:0">Executive summary</h2>
+    <p style="font-size:15.5px;color:#1e293b">${esc(s.exec)}</p>
+  </div>`;
+
+  /* KPIs */
+  const kpi = (v,l,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  html += `<div class="kpis">`;
+  if(m.datedCount>0){
+    html += kpi(m.latePct+'%','Tasks finished late', m.latePct>=50?'warn':'ok');
+    html += kpi(m.avgSlipDays+'d','Avg task slip', m.avgSlipDays>=15?'warn':'mid');
+    html += kpi(m.maxSlipDays+'d','Worst single slip', m.maxSlipDays>=45?'warn':'mid');
+  } else { html += kpi('—','No dated tasks'); html += kpi('—','Avg task slip'); html += kpi('—','Worst single slip'); }
+  if(m.milestoneTotal>0) html += kpi(m.milestoneHitPct+'%','Milestones met', m.milestoneHitPct<=50?'warn':'ok');
+  else html += kpi('—','Milestones met');
+  html += kpi(m.scopeSignals,'Scope-change signals', m.scopeSignals>=3?'warn':'mid');
+  html += kpi(m.redFlagCount,'Red flags flagged', m.redFlagCount>=6?'warn':'mid');
+  html += `</div>`;
+
+  if(!r.rootCauses.length){
+    html += `<div class="notice">⚠️ <b>Not enough evidence to isolate root causes.</b><br>Add more notes, tasks with dates, milestones and red flags, then re-run the analysis.</div>`;
+  }
+
+  /* root causes */
+  if(r.rootCauses.length){
+    html += `<div class="sec-title"><h2>Ranked root causes</h2><div class="line"></div></div>`;
+    r.rootCauses.forEach(rc=>{
+      html += `<div class="rc-card" style="border-left-color:${scoreColor(rc.score)}">
+        <div class="rc-head">
+          <div class="rank-badge">${rc.rank}</div>
+          <div class="rc-title">${esc(rc.title)}</div>
+          ${sevBadge(rc.severity)}
+          <span class="area-tag">${esc(rc.area)}</span>
+        </div>
+        <div class="rc-chain">${rc.chain.split('→').map((seg,i,a)=> i===a.length-1? `<span>${esc(seg.trim())}</span>` : `<span>${esc(seg.trim())}</span><span class="arrow">→</span>`).join('')}</div>
+        <p class="rc-why">${esc(rc.why)}</p>
+        <div class="finding-chips">${rc.findings.map(id=>`<span class="fchip">${esc(findingTitle[id]||id)}</span>`).join('')}</div>
+        ${rc.evidence.length? `<ul class="ev-list">${rc.evidence.map(e=>`<li><span class="ev-tag ${e.type}">${e.type}</span><span>${esc(e.text)}${e.source?` <span style="opacity:.7">— ${esc(e.source)}</span>`:''}</span></li>`).join('')}</ul>`:''}
+        <div class="rc-score"><span class="small muted">Impact</span><div class="bar"><span style="width:${rc.score}%;background:${scoreColor(rc.score)}"></span></div><span class="pct">${rc.score}</span></div>
+        <ul class="prev-list">${rc.preventive.map(a=>`<li><span class="tick">✓</span><span>${esc(a.action)}</span><span class="fw">${esc(a.framework)}</span></li>`).join('')}</ul>
+      </div>`;
+    });
+  }
+
+  /* failure patterns */
+  if(r.patterns.length){
+    html += `<div class="sec-title"><h2>Classic failure patterns detected</h2><div class="line"></div></div>
+    <div class="pattern-strip">${r.patterns.map(pt=>`<div class="pattern"><b>${esc(pt.name)}</b><span>${esc(pt.desc)}</span></div>`).join('')}</div>`;
+  }
+
+  /* agent findings */
+  html += `<div class="sec-title"><h2>Agent-by-agent findings</h2><div class="line"></div></div>`;
+  r.agents.forEach(a=>{
+    html += `<details class="acc" ${a.score>=60?'open':''}>
+      <summary><span class="ic" style="background:${a.color}">${a.icon}</span> ${esc(a.name)}
+        <span class="verdict">${a.score}/100 · ${esc(a.verdict)}</span></summary>
+      <div class="body">`;
+    if(!a.findings.length){ html += `<p class="muted small">No significant issues detected from the available evidence.</p>`; }
+    a.findings.forEach(f=>{
+      html += `<div class="finding">
+        <div class="fh"><span class="ft">${esc(f.title)}</span> ${sevBadge(f.severityLabel)}
+          <span class="conf-dot">● ${Math.round(f.confidence*100)}% confidence</span></div>
+        <div class="fd">${esc(f.detail)}</div>
+        ${f.evidence.length? `<ul class="ev-list">${f.evidence.map(e=>`<li><span class="ev-tag ${e.type}">${e.type}</span><span>${esc(e.text)}${e.source?` <span style="opacity:.7">— ${esc(e.source)}</span>`:''}</span></li>`).join('')}</ul>`:''}
+      </div>`;
+    });
+    html += `</div></details>`;
+  });
+
+  /* action plan */
+  html += `<div class="sec-title"><h2>Preventive action plan</h2><div class="line"></div></div>
+  <div class="card" style="padding:8px 6px;overflow-x:auto">
+    <table class="plan-table">
+      <thead><tr><th>#</th><th>Action</th><th>Addresses</th><th>Owner</th><th>Effort</th><th>Framework</th></tr></thead>
+      <tbody>
+      ${r.plan.map(a=>`<tr>
+        <td>${a.id}</td>
+        <td style="min-width:300px">${esc(a.action)}</td>
+        <td style="min-width:160px">${esc(a.cause)}</td>
+        <td style="white-space:nowrap">${esc(a.owner)}</td>
+        <td><span class="effort ${a.effort}">${a.effort}</span></td>
+        <td><span class="fw-tag">${esc(a.framework)}</span></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+
+  html += `<p class="muted small" style="margin-top:16px">Method: deterministic evidence-based inference — keyword/phrase mining over notes, red-flag mapping, and quantitative schedule analysis (lateness, milestone slip, slippage trend). Each finding links evidence → root cause → preventive action, weighted by severity and confidence.</p>`;
+
+  body.innerHTML = html;
+}
+
+/* ---------- markdown export ---------- */
+function buildMarkdown(){
+  const r = state.report; if(!r) return '';
+  const m = r.metrics, s = r.summary;
+  const L = [];
+  const push = x => L.push(x);
+  push('# Project Autopsy — '+r.project.name);
+  push('');
+  push('**Outcome:** '+s.outcome+'  ·  **Overall risk index:** '+s.riskScore+'/100  ·  **Confidence:** '+s.confidence+'%');
+  push('');
+  push('## Executive summary');
+  push('');
+  push(s.exec);
+  push('');
+  push('## Key metrics');
+  push('');
+  push('| Metric | Value |');
+  push('|---|---|');
+  if(m.datedCount>0){
+    push('| Tasks finished late | '+m.latePct+'% ('+m.lateCount+' of '+m.withActualCount+' dated) |');
+    push('| Average task slip | '+m.avgSlipDays+' days |');
+    push('| Worst single slip | '+m.maxSlipDays+' days |');
+  }
+  if(m.milestoneTotal>0) push('| Milestones met | '+m.milestoneHitPct+'% ('+(m.milestoneTotal-m.milestoneMissed)+'/'+m.milestoneTotal+') · avg slip '+m.avgMilestoneSlip+' days |');
+  push('| Scope-change signals | '+m.scopeSignals+' |');
+  push('| Red flags flagged | '+m.redFlagCount+' of '+ENGINE.SYMPTOMS.length+' |');
+  push('| Slippage compounding | '+(m.slipTrending?'Yes':'No')+' |');
+  push('');
+  push('## Root causes (ranked)');
+  push('');
+  r.rootCauses.forEach(rc=>{
+    push('### '+rc.rank+'. '+rc.title+' — '+rc.severity+' ('+rc.score+'/100)');
+    push('');
+    push('_'+rc.area+'_  ·  causal chain: '+rc.chain);
+    push('');
+    push(rc.why);
+    push('');
+    push('- Findings: '+rc.findings.map(id=>{
+      let t=id; r.agents.forEach(a=>a.findings.forEach(f=>{if(f.id===id)t=f.title;})); return t;
+    }).join('; '));
+    push('- Preventive actions:');
+    rc.preventive.forEach(a=>push('  - '+a.action+' _(owner: '+a.owner+', effort: '+a.effort+', framework: '+a.framework+')_'));
+    push('');
+  });
+  if(r.patterns.length){
+    push('## Classic failure patterns detected');
+    push('');
+    r.patterns.forEach(pt=>push('- **'+pt.name+'**: '+pt.desc));
+    push('');
+  }
+  push('## Agent-by-agent findings');
+  push('');
+  r.agents.forEach(a=>{
+    push('### '+a.icon+' '+a.name+' — '+a.score+'/100 ('+a.verdict+')');
+    push('');
+    if(!a.findings.length) push('No significant issues detected.');
+    a.findings.forEach(f=>{
+      push('- **'+f.title+'** ['+f.severityLabel+' · '+Math.round(f.confidence*100)+'% conf] — '+f.detail);
+      f.evidence.forEach(e=>push('  - '+e.text+(e.source?' _('+e.source+')_':'')));
+    });
+    push('');
+  });
+  push('## Preventive action plan');
+  push('');
+  push('| # | Action | Addresses | Owner | Effort | Framework |');
+  push('|---|---|---|---|---|---|');
+  r.plan.forEach(a=>push('| '+a.id+' | '+a.action+' | '+a.cause+' | '+a.owner+' | '+a.effort+' | '+a.framework+' |'));
+  push('');
+  push('---');
+  push('_Generated by Project Autopsy — AI Failure Analyst (deterministic multi-agent root-cause analysis). Output is guidance, not a substitute for human judgement._');
+  return L.join('\n');
+}
+function downloadMarkdown(){
+  const md = buildMarkdown();
+  const blob = new Blob([md], {type:'text/markdown'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (state.project.name||'project').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').toLowerCase()+'-autopsy.md';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function copyMarkdown(){
+  const md = buildMarkdown();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(md).then(()=>flashCopy(true)).catch(()=>fallbackCopy(md));
+  } else fallbackCopy(md);
+}
+function fallbackCopy(md){
+  const ta = document.createElement('textarea');
+  ta.value = md; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); flashCopy(true); }catch(e){ flashCopy(false); }
+  document.body.removeChild(ta);
+}
+let copyToast;
+function flashCopy(ok){
+  if(copyToast) copyToast.remove();
+  copyToast = document.createElement('div');
+  copyToast.textContent = ok? '✓ Report copied to clipboard' : 'Could not copy';
+  copyToast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:10px;font-size:13.5px;font-weight:600;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.25)';
+  document.body.appendChild(copyToast);
+  setTimeout(()=>copyToast.remove(), 2200);
+}
+
+/* ---------- boot ---------- */
+(function init(){
+  const oc = document.getElementById('f-outcome');
+  oc.innerHTML = Object.entries(ENGINE.OUTCOME_LABELS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('');
+  document.getElementById('home-agent-strip').innerHTML = ENGINE.AGENTS.map(a=>`<span class="agent-pill">${a.icon} ${esc(a.name)}</span>`).join('');
+  document.querySelectorAll('#ev-tabs .tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+  document.querySelectorAll('.step').forEach(el=>el.addEventListener('click',()=>{
+    const s = +el.dataset.step;
+    if(s===1 && state.step===0) toProfile();
+    else if(s<state.step) setStep(s);
+  }));
+  fillProfileForm();
+  renderEvidence();
+})();
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2cf0e1c3be499af',t:'MTc4NzAzNjU2OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
